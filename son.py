@@ -3,6 +3,7 @@ import wandb
 import utils
 import torch
 import model
+import metrics
 import argparse
 import numpy as np
 
@@ -90,6 +91,11 @@ if __name__ == '__main__':
     )
     
     ## Train
+    metrics_valid = metrics.SOMetrics(log_txt, 
+                                      output_path, 
+                                      args.epochs, 
+                                      validset.dataset.__len__()
+                                      )
     error_train = torch.zeros(args.epochs).to(device)
     error_valid = torch.zeros(args.epochs).to(device)
     early_stopper = False
@@ -139,12 +145,14 @@ if __name__ == '__main__':
                 
             with torch.no_grad():
                 predict_ = surgical_model(embed_)
-                
+            
             error_batch = criteria(predict_, label_)
             error_valid[epoch] += error_batch
+            metrics_valid.batch(label_, predict_)
         
         error_valid[epoch] /= validset.dataset.__len__()
         utils.print_log(f"\tValidation Loss\t: {error_valid[epoch].item()}", log_txt, display=True)
+        metrics_valid.epoch_end(epoch)
         wandb.log({"error_valid": error_valid[epoch], "epoch": epoch})
               
         # early stopper
@@ -164,4 +172,4 @@ if __name__ == '__main__':
             
         epoch += 1
 
-    utils.plot_error(error_train, error_valid, output_path)
+    metrics_valid.eval_end('validation')

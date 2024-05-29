@@ -73,18 +73,19 @@ def init_log(args):
 
 def remove_tailzeros(arr):
     """Remove trailing zeros from a 1D NumPy array."""
-    if not isinstance(arr, np.ndarray):
-        raise ValueError("Input should be a numpy array")
-    if arr.ndim != 1:
-        raise ValueError("Input array should be 1D")
-    
-    # Find the index of the last non-zero element
-    last_nonzero = np.nonzero(arr)[0]
-    
-    if len(last_nonzero) == 0:
-        return np.array([])
-    
-    return arr[:last_nonzero[-1] + 1]
+    if isinstance(arr, np.ndarray):    
+        last_nonzero = np.nonzero(arr)[0]
+        if len(last_nonzero) == 0:
+            return np.array([])
+        else:
+            return arr[:last_nonzero[-1] + 1]
+    """Remove trailing zeros from a torch array."""
+    if isinstance(arr, torch.Tensor):    
+        last_nonzero = torch.nonzero(arr, as_tuple=True)[0]
+        if len(last_nonzero) == 0:
+            return torch.tensor([])
+        else:
+            return arr[:(last_nonzero[-1].item() + 1)]
 
 
 def time2sec(time_str, return_ms = False):
