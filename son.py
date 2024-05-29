@@ -1,21 +1,15 @@
-'''
-Remaining surgery duration estimation 
-via sentences in pocap dataset
-'''
-import sys
-import data
 import wandb
 import utils
 import torch
 import model
 import argparse
 import numpy as np
+import data_offline as data
 
 np.random.seed(1)
 torch.manual_seed(1)
 torch.cuda.manual_seed(1)
-wandb.login()
-      
+
 if __name__ == '__main__':
     # Args
     parser = argparse.ArgumentParser(
@@ -32,7 +26,7 @@ if __name__ == '__main__':
                         help='number of epochs to train')
     
     parser.add_argument('-b', '--batch_size', 
-                        type=int, default=16,
+                        type=int, default=1,
                         help='batch size of training data')
     
     parser.add_argument('-d', '--dropout_prob', 
@@ -69,12 +63,8 @@ if __name__ == '__main__':
     output_path, log_txt = utils.init_log(args)
     
     # Get data
-    data_split = utils.data_split('Data/', log_txt)
-    trainset, validset, testset = data.get_dataset('Data/annotations.json',
-                                                   data_split,
-                                                   args.model_dim,
-                                                   args.batch_size)
-    
+    trainset, validset, testset = data.get_dataset('Data/')
+    num_classes = 20 # TODO: parameterize
     
     # Init model
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -82,7 +72,7 @@ if __name__ == '__main__':
         model_dim=args.model_dim,
         num_head=args.num_head,
         num_encoder=args.num_enc,
-        num_classes=1,
+        num_classes=num_classes,
         dropout_prob=args.dropout_prob
     ).to(device)
     utils.print_log('Number of Parameters: {:,}'.format(sum(p.numel() 
@@ -90,7 +80,7 @@ if __name__ == '__main__':
                     log_txt)
     
     # Loss function
-    criteria = torch.nn.MSELoss(reduction='mean')
+    criteria = torch.nn.CrossEntropyLoss(reduction='mean')
     
     # Optimizer 
     optimizer = torch.optim.Adam(
@@ -117,43 +107,44 @@ if __name__ == '__main__':
         )
         
         print('\nTraining...')
-        for i, data_loader in enumerate(trainset):
+        surgical_model.train()
+        for i, (embed_, label_) in enumerate(trainset):
             print("\t\tEpoch progress: {:.2f} %".format((i+1)/len(trainset)*100), 
-                  end = '\r')
+                  end = '\r')    
             
-            surgical_model.train()
-            for (time_, embed_, _, label_) in data_loader:
-                time_ = time_.clone().detach().float().to(device)
-                embed_ = embed_.clone().detach().float().to(device)
-                label_ = label_.clone().detach().float().to(device)
-                
-                optimizer.zero_grad()
-                
-                predict_ = surgical_model(embed_, time_)
-                
-                error_batch = criteria(predict_, label_)
-                error_train[epoch] += error_batch 
-                
-                error_batch.backward()
-                optimizer.step()
+            embed_ = embed_.clone().detach().float().to(device)
+            label_ = label_.clone().detach().long().to(device).squeeze()
+            
+            optimizer.zero_grad()
+            
+            predict_ = surgical_model(embed_)
+            
+            error_batch = criteria(predict_, label_)
+            error_train[epoch] += error_batch 
+            
+            error_batch.backward()
+            optimizer.step()
+        
+        error_train[epoch] /= trainset.dataset.__len__()
+        utils.print_log(f"\tTrain Loss\t: {error_train[epoch].item()}", log_txt, display=True)
         
         print('\nValidating...')
-        for i, data_loader in enumerate(validset):
+        surgical_model.eval()
+        for i, (embed_, label_) in enumerate(validset):
             print("\t\tEpoch progress: {:.2f} %".format((i+1)/len(validset)*100), 
-                  end = '\r')
+                  end = '\r')    
             
-            surgical_model.eval()
-            for (time_, embed_, _, label_) in data_loader:
-                time_ = time_.clone().detach().float().to(device)
-                embed_ = embed_.clone().detach().float().to(device)
-                label_ = label_.clone().detach().float().to(device)
+            embed_ = embed_.clone().detach().float().to(device)
+            label_ = label_.clone().detach().long().to(device).squeeze()
                 
-                with torch.no_grad():
-                    predict_ = surgical_model(embed_, time_)
+            with torch.no_grad():
+                predict_ = surgical_model(embed_)
                 
-                error_batch = criteria(predict_, label_)
-                error_valid[epoch] += error_batch
+            error_batch = criteria(predict_, label_)
+            error_valid[epoch] += error_batch
         
+        error_valid[epoch] /= validset.dataset.__len__()
+        utils.print_log(f"\tValidation Loss\t: {error_valid[epoch].item()}", log_txt, display=True)
         wandb.log({"error_valid": error_valid[epoch], "epoch": epoch})
               
         # early stopper
@@ -174,32 +165,3 @@ if __name__ == '__main__':
         epoch += 1
 
     utils.plot_error(error_train, error_valid, output_path)
-    
-    
-    ## Result from best model
-    checkpoint = torch.load(output_path + '/results/checkpoint.ckp')
-    surgical_model.load_state_dict(checkpoint['model_state_dict'])
-    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    
-    print('\n\nGenerating results from epoch {}...'.format(checkpoint['epoch']))
-    
-    for i, data_loader in enumerate(validset):
-        op_name = data_loader.dataset.get_op_name()
-        print(f'\t{op_name} in validation set')
-        
-        predicted_rsd = torch.zeros(len(data_loader.dataset))
-        true_rsd = torch.zeros(len(data_loader.dataset))
-        
-        surgical_model.eval()
-        for n, (time_, embed_, _, label_) in enumerate(data_loader):
-            time_ = time_.clone().detach().float().to(device)
-            embed_ = embed_.clone().detach().float().to(device)
-            label_ = label_.clone().detach().float().to(device)
-            
-            with torch.no_grad():
-                predict_ = surgical_model(embed_, time_)
-                
-            predicted_rsd[n*args.batch_size:(n+1)*args.batch_size] = predict_
-            true_rsd[n*args.batch_size:(n+1)*args.batch_size] = label_
-            
-        utils.plot_rsd(predicted_rsd, true_rsd, output_path, op_name)

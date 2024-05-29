@@ -5,6 +5,7 @@ import torch
 import shutil
 import random
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 
 from datetime import datetime
@@ -123,7 +124,7 @@ def listdir(path, ending = None):
     else:
         return sorted([os.path.join(path, f) for f in os.listdir(path) 
                        if f.endswith(ending)])
-
+    
 
 def save_args(args, filename):
     # Convert the argparse Namespace to a dictionary
@@ -132,36 +133,6 @@ def save_args(args, filename):
     # Save the dictionary to a YAML file
     with open(filename, 'w') as file:
         yaml.dump(params, file, default_flow_style=False)
-
-
-def data_split(data_path, log_txt = 'log.txt', split = 0.8):
-    # read path
-    ops = listdir(data_path, '.pkl')
-
-    # shuffle
-    random.seed(1881)
-    random.shuffle(ops)
-    
-    # compute number of ops in testset
-    if len(ops)%2 == 0:
-        testset_size = math.ceil(len(ops)*(1-split))
-    else:
-        testset_size = math.ceil(len(ops-1)*(1-split))
-    
-    # split
-    trainset = ops[:-2*testset_size]
-    validset = ops[-2*testset_size:-testset_size]
-    testset = ops[-testset_size:]
-    
-    # log
-    print_log("\tTrainset [{}] Data Channels\t: {}".format(len(trainset),
-                                                    trainset), log_txt)
-    print_log("\tValidset [{}] Data Channels\t: {}".format(len(validset), 
-                                                    validset), log_txt)
-    print_log("\tTestset [{}] Data Channels\t: {}".format(len(testset), 
-                                                    testset), log_txt)
-        
-    return [trainset,validset, testset]
     
 
 def plot_error(error_train, error_valid, output_path):

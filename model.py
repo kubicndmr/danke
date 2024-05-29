@@ -134,12 +134,10 @@ class SLPNet(nn.Module):
             out_features=num_classes
         )
                 
-    def forward(self, x, pe):
+    def forward(self, x):
         # input preprocess
-        pe = pe.unsqueeze(-1) 
-        x = self.embed_in(x.unsqueeze(-1))
-        x = x+pe 
-        
+        x = self.embed_in(x)
+    
         # encode
         x = self.encoder(torch.transpose(x, 1, 2))
                 
