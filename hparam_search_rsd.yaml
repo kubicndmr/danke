@@ -1,0 +1,26 @@
+program: main.py
+method: random
+metric:
+  goal: minimize
+  name: error_valid
+parameters:
+  project_name:
+    value: 'RSD'
+  training_tag:
+    value: 'hparam_tuning'
+  epochs:
+    value: 150
+  batch_size:
+    values: [8, 16, 32, 64, 128]
+  dropout_prob:
+    values: [0, 0.1, 0.15, 0.2, 0.5]
+  learning_rate:
+    values: [1e-6, 5e-6, 1e-5, 5e-5]
+  weight_decay:
+    values: [1e-7, 5e-7, 1e-6, 5e-6]
+  model_dim:
+    values: [1024, 512, 256, 128]
+  num_head:
+    values: [2, 4]
+  num_enc:
+    values: [1, 2, 3]
