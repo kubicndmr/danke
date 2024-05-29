@@ -1,12 +1,18 @@
-from datasets import load_dataset
-import pandas as pd
+import os
 import nltk
 import random
+import pandas as pd
+
+from datasets import load_dataset
+
 
 # Download the necessary NLTK data
 nltk.download('punkt')
 
+# Create target data folder
+os.mkdir('Data')
 
+# Parameters
 n_split = [100000, 120000, 140000] # number of abstracts in train, valid, test sets
 min_abs_len = 1 # min number of sentences in abstract
 max_abs_len = 20 # max number of sentences in abstract

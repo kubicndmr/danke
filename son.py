@@ -1,10 +1,10 @@
+import data
 import wandb
 import utils
 import torch
 import model
 import argparse
 import numpy as np
-import data_offline as data
 
 np.random.seed(1)
 torch.manual_seed(1)
@@ -63,7 +63,7 @@ if __name__ == '__main__':
     output_path, log_txt = utils.init_log(args)
     
     # Get data
-    trainset, validset, testset = data.get_dataset('Data/')
+    trainset, validset, testset = data.get_dataset('Data/', 'offline')
     num_classes = 20 # TODO: parameterize
     
     # Init model
