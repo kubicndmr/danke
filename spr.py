@@ -64,7 +64,7 @@ if __name__ == '__main__':
     output_path, log_txt = utils.init_log(args)
     
     # Get data
-    trainset, validset, testset = data.get_dataset('/DATA/kubi/PubMed_700k/', 'offline')
+    trainset, validset, testset = data.get_dataset('/DATA/kubi/PoCaP_WhisperL3/', 'offline')
     num_classes = 20 # TODO: parameterize
     
     # Init model
@@ -76,6 +76,7 @@ if __name__ == '__main__':
         num_classes=num_classes,
         dropout_prob=args.dropout_prob
     ).to(device)
+    utils.print_log(surgical_model, log_txt)
     utils.print_log('Number of Parameters: {:,}'.format(sum(p.numel() 
                     for p in surgical_model.parameters() if p.requires_grad)), 
                     log_txt)
@@ -169,6 +170,7 @@ if __name__ == '__main__':
             patience_escb += 1
         if patience_escb > patience_limit:
             early_stopper = True
+            utils.print_log('Early Stopper!!!', log_txt, display=True)
             
         epoch += 1
 
