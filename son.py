@@ -76,6 +76,7 @@ if __name__ == '__main__':
         num_classes=num_classes,
         dropout_prob=args.dropout_prob
     ).to(device)
+    utils.print_log(surgical_model, log_txt)
     utils.print_log('Number of Parameters: {:,}'.format(sum(p.numel() 
                     for p in surgical_model.parameters() if p.requires_grad)), 
                     log_txt)
@@ -91,6 +92,11 @@ if __name__ == '__main__':
     )
     
     ## Train
+    metrics_train = metrics.SOMetrics(log_txt, 
+                                      output_path, 
+                                      args.epochs, 
+                                      trainset.dataset.__len__()
+                                      )
     metrics_valid = metrics.SOMetrics(log_txt, 
                                       output_path, 
                                       args.epochs, 
@@ -127,12 +133,14 @@ if __name__ == '__main__':
             
             error_batch = criteria(predict_, label_)
             error_train[epoch] += error_batch 
+            metrics_train.batch(label_, predict_)
             
             error_batch.backward()
             optimizer.step()
         
         error_train[epoch] /= trainset.dataset.__len__()
         utils.print_log(f"\tTrain Loss\t: {error_train[epoch].item()}", log_txt, display=True)
+        metrics_train.epoch_end(epoch)
         
         print('\nValidating...')
         surgical_model.eval()
@@ -152,8 +160,12 @@ if __name__ == '__main__':
         
         error_valid[epoch] /= validset.dataset.__len__()
         utils.print_log(f"\tValidation Loss\t: {error_valid[epoch].item()}", log_txt, display=True)
+        wandb.log({"error_valid": error_valid[epoch],
+                   "PMR": metrics_valid.pmr_score / validset.dataset.__len__(),
+                   "Acc": metrics_valid.acc_score / validset.dataset.__len__(),
+                   "Tau": metrics_valid.tau_score / validset.dataset.__len__(),
+                   "epoch": epoch})
         metrics_valid.epoch_end(epoch)
-        wandb.log({"error_valid": error_valid[epoch], "epoch": epoch})
               
         # early stopper
         if error_valid[epoch] < best_loss:
@@ -169,9 +181,11 @@ if __name__ == '__main__':
             patience_escb += 1
         if patience_escb > patience_limit:
             early_stopper = True
+            utils.print_log('Early Stopper!!!', log_txt, display=True)
             
         epoch += 1
 
+    metrics_train.eval_end('train')
     metrics_valid.eval_end('validation')
     
     # Log memory usage

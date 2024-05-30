@@ -95,12 +95,12 @@ class SLPEncoder(nn.Module):
     
     def forward(self, x, mask=None):
         # Attention part
-        attn_out = self.self_attn(x, mask=mask)
+        attn_out = self.self_attn(x, mask=mask) # (B, L, model_dim)
         x = x + self.dropout(attn_out)
         x = self.norm1(x)
 
         # MLP part
-        linear_out = self.linear_net(x)
+        linear_out = self.linear_net(x) # (B, L, model_dim)
         x = x + self.dropout(linear_out)
         x = self.norm2(x)
 
@@ -135,15 +135,15 @@ class SLPNet(nn.Module):
         )
                 
     def forward(self, x):
-        # input preprocess
-        x = self.embed_in(x)
-    
+        # input 
+        x = self.embed_in(x) # (B, 512, L) -> (B, model_dim, L)
+        
         # encode
-        x = self.encoder(torch.transpose(x, 1, 2))
-                
+        x = self.encoder(torch.transpose(x, 1, 2)) # -> (B, L, model_dim)
+        
         # classify
         x = self.classfier(x)
-        return x.squeeze()
+        return x.squeeze() # -> (L, model_dim)
     
     def get_attention_maps(self, x, mask=None):
         attention_maps = []
