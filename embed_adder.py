@@ -13,7 +13,7 @@ model.to(device)
 def get_embedding(sentences):
     return model.encode(sentences, convert_to_tensor=True).T
 
-for df_path in utils.listdir('Data'):
+for df_path in utils.listdir('/DATA/kubi/PubMed_700k/'):
     print(df_path)
     df = pd.read_pickle(df_path)
     df['ShuffledEmbeddings'] = df['ShuffledSentences'].apply(get_embedding)

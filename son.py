@@ -64,7 +64,7 @@ if __name__ == '__main__':
     output_path, log_txt = utils.init_log(args)
     
     # Get data
-    trainset, validset, testset = data.get_dataset('Data/', 'offline')
+    trainset, validset, testset = data.get_dataset('/DATA/kubi/PubMed_700k/', 'offline')
     num_classes = 20 # TODO: parameterize
     
     # Init model
@@ -173,3 +173,6 @@ if __name__ == '__main__':
         epoch += 1
 
     metrics_valid.eval_end('validation')
+    
+    # Log memory usage
+    utils.print_log(torch.cuda.memory_summary(device=device), log_txt)

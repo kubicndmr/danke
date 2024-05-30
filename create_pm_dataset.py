@@ -13,7 +13,7 @@ nltk.download('punkt')
 os.mkdir('Data')
 
 # Parameters
-n_split = [100000, 120000, 140000] # number of abstracts in train, valid, test sets
+n_split = [500000, 600000, 700000] # number of abstracts in train, valid, test sets
 min_abs_len = 1 # min number of sentences in abstract
 max_abs_len = 20 # max number of sentences in abstract
 
