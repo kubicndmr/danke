@@ -169,7 +169,10 @@ def data_split(data_path, log_txt = 'log.txt', split = 0.8):
 def plot_error(error_train, error_valid, output_path):
     error_train = remove_tailzeros(error_train.cpu().detach().numpy())
     error_valid = remove_tailzeros(error_valid.cpu().detach().numpy())
-       
+    
+    plt.rcParams['font.family'] = 'Times New Roman'
+    plt.rcParams['font.size'] = 18
+        
     plt.figure(dpi=FIG_DPI, constrained_layout=True)
     plt.plot(error_train, color='#084c61', label='Train')
     plt.plot(error_valid, color='#ffc857', label='Valid')
@@ -177,20 +180,4 @@ def plot_error(error_train, error_valid, output_path):
     plt.ylabel('MSE', fontsize=16)
     plt.legend(loc="upper right", fontsize=12)
     plt.savefig(output_path+'results/error_function.jpg')
-    plt.close('all')
-    
-    
-def plot_rsd(predicted_rsd, true_rsd, output_path, op_name):
-    predicted_rsd = predicted_rsd.cpu().detach().numpy()*10000
-    true_rsd = true_rsd.cpu().detach().numpy()*10000
-    running_mean = np.convolve(predicted_rsd, np.ones(5)/5, mode='valid')    
-    
-    plt.figure(dpi=FIG_DPI, constrained_layout=True)
-    plt.plot(predicted_rsd, color='#db3a34', label='Predicted')
-    plt.plot(true_rsd, color='#084c61', label='True')
-    plt.plot(running_mean, color='#ffb703', label='Mean')
-    plt.xlabel('Sentences', fontsize=16)
-    plt.ylabel('RSD (s)', fontsize=16)
-    plt.legend(loc="upper right", fontsize=12)
-    plt.savefig(output_path+f'results/{op_name}.jpg')
     plt.close('all')

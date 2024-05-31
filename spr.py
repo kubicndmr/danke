@@ -65,6 +65,7 @@ if __name__ == '__main__':
     
     ## Data
     trainset, validset, testset = data.get_dataset('/DATA/kubi/PoCaP_WhisperL3/',
+                                                   log_txt,
                                                    args.batch_size)
     num_classes = 9
     
@@ -100,7 +101,7 @@ if __name__ == '__main__':
     early_stopper = False
     patience_limit = 5
     patience_escb = 0
-    delta_escb = 0.1
+    delta_escb = 0.001
     best_loss = 1E9
     epoch = 0
     
@@ -206,8 +207,10 @@ if __name__ == '__main__':
             
         epoch += 1
 
+    # Log
     metrics_train.eval_end('train')
     metrics_valid.eval_end('validation')
+    utils.plot_error(error_train, error_valid)
     
     # Log memory usage
     utils.print_log(torch.cuda.memory_summary(device=device), log_txt)

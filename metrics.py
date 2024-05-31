@@ -75,12 +75,15 @@ class SPRMetrics:
         # Reset memory
         self.op_metrics = []
     
-    def eval_end(self, mode):        
+    def eval_end(self, mode):
+        plt.rcParams['font.family'] = 'Times New Roman'
+        plt.rcParams['font.size'] = 18
+     
         plt.figure(dpi=100, constrained_layout=True)
         for i, metric in enumerate(self.metric_keys):
             plt.plot(utils.remove_tailzeros(self.all_metrics[:, i]), label=metric)
             
-        plt.xlabel('Epochs', fontsize=16)
+        plt.xlabel('Epochs', fontsize=18)
         plt.legend(loc="upper left", fontsize=12)
         plt.savefig(self.output_path+f'results/{mode}_metrics.jpg')
         plt.close('all')
