@@ -1,0 +1,26 @@
+program: spr.py
+method: random
+metric:
+  goal: minimize
+  name: error_valid
+parameters:
+  project_name:
+    value: 'SPR'
+  training_tag:
+    value: 'hparam_tuning'
+  epochs:
+    value: 150
+  batch_size:
+    values: [64, 128, 256]
+  dropout_prob:
+    values: [0, 0.1, 0.15, 0.2, 0.5]
+  learning_rate:
+    values: [1e-6, 5e-6, 1e-5, 5e-5]
+  weight_decay:
+    values: [1e-7, 5e-7, 1e-6, 5e-6]
+  model_dim:
+    values: [1024, 512, 256, 128]
+  num_stages:
+    values: [1, 2, 3]
+  num_layers:
+    values: [3, 5, 7]
