@@ -2,72 +2,78 @@ import utils
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
- 
-class SOMetrics():
-    def __init__(self, log_txt, output_path, epochs, dataset_length):
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.all_metrics = np.zeros((epochs, 5))
-        self.dataset_length = dataset_length
+
+from sklearn.metrics import f1_score
+from sklearn.metrics import recall_score
+from sklearn.metrics import jaccard_score
+from sklearn.metrics import accuracy_score
+from sklearn.metrics import precision_score
+
+class SPRMetrics:
+    def __init__(self, log_txt, output_path, epochs):
+        self.metric_keys = ['Acc', 'F1', 'Recall', 'Precision', 'Jaccard']
+        self.all_metrics = np.zeros((epochs, len(self.metric_keys)))
         self.output_path = output_path
         self.log_txt = log_txt
         
-        self.metric_keys = ['PMR', 'Acc', 'KT', 'Rouge-S', 'LCS']
-        self.pmr_score = 0
-        self.acc_score = 0
-        self.tau_score = 0
-        self.r_s_score = 0
-        self.lcs_score = 0
-        
-    def _perfect_match(self, ground_truth, predicted):
-        self.pmr_score += torch.allclose(ground_truth, predicted)
-    
-    def _accuracy(self, ground_truth, predicted):
-        self.acc_score += torch.sum(ground_truth == predicted)/len(ground_truth)
+        self.op_gt = []
+        self.op_pr = []
+        self.op_metrics = []
 
-    def _kendall_tau(self, ground_truth, predicted):
-        n = ground_truth.shape[0]
-        sub_pairs = lambda x, n: (x.expand(n,n).T - x).sign_()
-        self.tau_score += sub_pairs(ground_truth,n).mul_(sub_pairs(predicted,n)).sum().div(n*(n-1))
-    
-    def _ruoge_s(self):
-        self.r_s_score = 0
-
-    def _lcs(self):
-        self.lcs_score = 0
-    
     def batch(self, ground_truth, predicted):
-        # select prediction
+        # Select prediction
         _, predicted = torch.max(predicted, dim=1)
         
-        # check inputs
+        # Validate inputs
         if ground_truth.dim() != 1 or predicted.dim() != 1:
             raise ValueError("Both inputs must be 1-dimensional tensors.")
     
         if len(ground_truth) != len(predicted):
             raise ValueError("Both tensors must have the same length.")
         
-        # compute metrics 
-        self._perfect_match(ground_truth, predicted)
-        self._accuracy(ground_truth, predicted)
-        self._kendall_tau(ground_truth, predicted)
-        self._ruoge_s()
-        self._lcs()
-    
+        self.op_gt.append(ground_truth.cpu().numpy())
+        self.op_pr.append(predicted.cpu().numpy())
+
+    def op_end(self, op_name):
+        # Convert lists to numpy arrays
+        ground_truth = np.concatenate(self.op_gt)
+        prediction = np.concatenate(self.op_pr)
+        
+        # Exclude transition periods
+        transition_indices = np.where(ground_truth == 8)
+        ground_truth = np.delete(ground_truth, transition_indices)
+        prediction = np.delete(prediction, transition_indices)
+        
+        # Compute metrics
+        metrics = {
+            'Name': op_name,
+            'Acc': accuracy_score(ground_truth, prediction),
+            'F1': f1_score(ground_truth, prediction, average='macro', zero_division=0.0),
+            'Recall': recall_score(ground_truth, prediction, average='macro', zero_division=0.0),
+            'Precision': precision_score(ground_truth, prediction, average='macro', zero_division=0.0),
+            'Jaccard': jaccard_score(ground_truth, prediction, average='macro', zero_division=0.0)
+        }
+        self.op_metrics.append(metrics)
+        
+        # Reset memory
+        self.op_gt = []
+        self.op_pr = []
+
     def epoch_end(self, epoch):
-        metric_values = [self.pmr_score, self.acc_score, 
-                         self.tau_score, self.r_s_score, 
-                         self.lcs_score]
-        
-        for i, (k, v) in enumerate(zip(self.metric_keys, metric_values)):
-            self.all_metrics[epoch, i] = v / self.dataset_length
-            utils.print_log(f"\t{k}\t: {v / self.dataset_length:.3}", self.log_txt, display=True)
-        
-        # reset memory
-        self.pmr_score = 0
-        self.acc_score = 0
-        self.tau_score = 0
-        self.rs_score = 0
-        self.lcs_score = 0
+        # Log metrics to file
+        for i, metric in enumerate(self.metric_keys):
+            utils.print_log(f"\t{metric}", self.log_txt)
+            avg_metric = np.mean([metrics[metric] for metrics in self.op_metrics])
+            for metrics in self.op_metrics:
+                utils.print_log(f"\t\t{metrics['Name']}\t: {metrics[metric]:.3f}", 
+                                self.log_txt)
+            utils.print_log(f"\t\tMean {metric}:\t {avg_metric:.3f}", 
+                            self.log_txt,
+                            display=True)
+            self.all_metrics[epoch, i] = avg_metric
+
+        # Reset memory
+        self.op_metrics = []
     
     def eval_end(self, mode):        
         plt.figure(dpi=100, constrained_layout=True)
@@ -76,6 +82,6 @@ class SOMetrics():
             
         plt.xlabel('Epochs', fontsize=16)
         plt.legend(loc="upper left", fontsize=12)
-        plt.savefig(self.output_path+f'results/{mode}.jpg')
+        plt.savefig(self.output_path+f'results/{mode}_metrics.jpg')
         plt.close('all')
         

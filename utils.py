@@ -136,6 +136,36 @@ def save_args(args, filename):
         yaml.dump(params, file, default_flow_style=False)
     
 
+def data_split(data_path, log_txt = 'log.txt', split = 0.8):
+    # read path
+    ops = listdir(data_path, '.pkl')
+
+    # shuffle
+    random.seed(1881)
+    random.shuffle(ops)
+    
+    # compute number of ops in testset
+    if len(ops)%2 == 0:
+        testset_size = math.ceil(len(ops)*(1-split))
+    else:
+        testset_size = math.ceil(len(ops-1)*(1-split))
+    
+    # split
+    trainset = ops[:-2*testset_size]
+    validset = ops[-2*testset_size:-testset_size]
+    testset = ops[-testset_size:]
+    
+    # log
+    print_log("\tTrainset [{}] Data Channels\t: {}".format(len(trainset),
+                                                    trainset), log_txt)
+    print_log("\tValidset [{}] Data Channels\t: {}".format(len(validset), 
+                                                    validset), log_txt)
+    print_log("\tTestset [{}] Data Channels\t: {}".format(len(testset), 
+                                                    testset), log_txt)
+        
+    return [trainset,validset, testset]
+
+
 def plot_error(error_train, error_valid, output_path):
     error_train = remove_tailzeros(error_train.cpu().detach().numpy())
     error_valid = remove_tailzeros(error_valid.cpu().detach().numpy())

@@ -1,10 +1,48 @@
 import copy
+import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 from collections import OrderedDict
 
+
+class MultiStageModel(nn.Module):
+    def __init__(self, num_stages, num_layers, num_f_maps, 
+                    dim, num_classes, causal_conv):
+        self.num_stages = num_stages
+        self.num_layers = num_layers
+        self.num_f_maps = num_f_maps
+        self.dim = dim
+        self.num_classes = num_classes
+        self.causal_conv = causal_conv
+
+        super(MultiStageModel, self).__init__()
+        self.stage1 = SingleStageModel(self.num_layers,
+                                       self.num_f_maps,
+                                       self.dim,
+                                       self.num_classes,
+                                       causal_conv=self.causal_conv)
+        self.stages = nn.ModuleList([
+            copy.deepcopy(
+                SingleStageModel(self.num_layers,
+                                 self.num_f_maps,
+                                 self.num_classes,
+                                 self.num_classes,
+                                 causal_conv=self.causal_conv))
+            for s in range(self.num_stages - 1)
+        ])
+        self.smoothing = False
+
+    def forward(self, x):
+        out_classes = self.stage1(x)
+        outputs_classes = out_classes.unsqueeze(0)
+        for s in self.stages:
+            out_classes = s(F.softmax(out_classes, dim=1))
+            outputs_classes = torch.cat(
+                (outputs_classes, out_classes.unsqueeze(0)), dim=0)
+        return outputs_classes
+    
 
 class SingleStageModel(nn.Module):
     def __init__(self,
@@ -32,6 +70,7 @@ class SingleStageModel(nn.Module):
             out = layer(out)
         out_classes = self.conv_out_classes(out)
         return out_classes
+
 
 
 class DilatedResidualLayer(nn.Module):
@@ -71,7 +110,7 @@ class DilatedResidualLayer(nn.Module):
 
 
 class SLPNet(nn.Module):
-    def __init__(self, model_dim, num_stages, num_layers, num_classes):
+    def __init__(self, model_dim, num_stages, num_layers, dropout_prob, num_classes):
         super().__init__()
         
         self.embed_in = nn.Sequential(
@@ -83,18 +122,11 @@ class SLPNet(nn.Module):
             nn.BatchNorm1d(model_dim)
         )
         
-        temporal_model = OrderedDict()
-        for n in range(num_stages):
-            temporal_model[f'TCN{n}'] = SingleStageModel(
-                num_layers, 
-                model_dim,
-                num_classes, 
-                causal_conv=True
-            )
-        self.temporal_model = nn.Sequential(temporal_model)
-                
+        self.temporal_model = MultiStageModel(num_stages, num_layers, 
+                                              model_dim, model_dim, 
+                                              num_classes, True)
+
     def forward(self, x):
         x = self.embed_in(x)
-        
-        x = self.temporal_model(torch.transpose(x, 1, 2))
-        return x
+        x = self.temporal_model(x)
+        return x.squeeze(-1)

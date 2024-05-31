@@ -12,9 +12,9 @@ torch.manual_seed(1)
 torch.cuda.manual_seed(1)
 
 if __name__ == '__main__':
-    # Args
+    ## Args
     parser = argparse.ArgumentParser(
-        description="Train a network for RSD")
+        description="Train a network for SPR")
     
     parser.add_argument('-p', '--project_name', type=str,
                         help='name of training')
@@ -27,7 +27,7 @@ if __name__ == '__main__':
                         help='number of epochs to train')
     
     parser.add_argument('-b', '--batch_size', 
-                        type=int, default=1,
+                        type=int, default=64,
                         help='batch size of training data')
     
     parser.add_argument('-d', '--dropout_prob', 
@@ -46,57 +46,55 @@ if __name__ == '__main__':
                         type=int, default=256,
                         help='hidden vector size of model')
     
-    parser.add_argument('-nh', '--num_head', 
-                        type=int, default=4,
-                        help='number of heads in MHA')
+    parser.add_argument('-nh', '--num_stages', 
+                        type=int, default=2,
+                        help='number of stages in MS-TCN')
     
-    parser.add_argument('-ne', '--num_enc', 
-                        type=int, default=3,
-                        help='number of stacked encoders')
+    parser.add_argument('-ne', '--num_layers', 
+                        type=int, default=5,
+                        help='number of stacked layers within a TCN')
     
     args = parser.parse_args()
     
-    # wandb
+    ## wandb
     wandb.init(project=args.project_name)
     wandb.config.update(args)
     
-    # Init output folder 
+    ## Init output folder 
     output_path, log_txt = utils.init_log(args)
     
-    # Get data
-    trainset, validset, testset = data.get_dataset('/DATA/kubi/PoCaP_WhisperL3/', 'offline')
-    num_classes = 20 # TODO: parameterize
+    ## Data
+    trainset, validset, testset = data.get_dataset('/DATA/kubi/PoCaP_WhisperL3/',
+                                                   args.batch_size)
+    num_classes = 9
     
-    # Init model
+    ## Model
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     surgical_model = model.SLPNet(
         model_dim=args.model_dim,
-        num_head=args.num_head,
-        num_encoder=args.num_enc,
-        num_classes=num_classes,
-        dropout_prob=args.dropout_prob
+        num_stages=args.num_stages,
+        num_layers=args.num_layers,
+        dropout_prob=args.dropout_prob,
+        num_classes=num_classes
     ).to(device)
     utils.print_log(surgical_model, log_txt)
     utils.print_log('Number of Parameters: {:,}'.format(sum(p.numel() 
                     for p in surgical_model.parameters() if p.requires_grad)), 
                     log_txt)
     
-    # Loss function
-    criteria = torch.nn.CrossEntropyLoss(reduction='mean')
+    ## Loss function
+    criteria = torch.nn.CrossEntropyLoss(reduction='mean', ignore_index=8)
     
-    # Optimizer 
+    ## Optimizer 
     optimizer = torch.optim.Adam(
         surgical_model.parameters(), 
         lr = args.learning_rate, 
         weight_decay = args.weight_decay
     )
     
-    ## Train
-    metrics_valid = metrics.SOMetrics(log_txt, 
-                                      output_path, 
-                                      args.epochs, 
-                                      validset.dataset.__len__()
-                                      )
+    ## Training
+    metrics_train = metrics.SPRMetrics(log_txt, output_path, args.epochs)
+    metrics_valid = metrics.SPRMetrics(log_txt, output_path, args.epochs)
     error_train = torch.zeros(args.epochs).to(device)
     error_valid = torch.zeros(args.epochs).to(device)
     early_stopper = False
@@ -106,6 +104,11 @@ if __name__ == '__main__':
     best_loss = 1E9
     epoch = 0
     
+    trainset_size = np.sum([d_l.dataset.__len__() for d_l in trainset])
+    validset_size = np.sum([d_l.dataset.__len__() for d_l in validset])
+    print(trainset_size, validset_size)
+    
+    # Iter epochs
     while (epoch < args.epochs) and (early_stopper == False):
         utils.print_log(
             "\n\nEpoch\t: {}/{}".format(epoch+1, args.epochs), 
@@ -115,48 +118,77 @@ if __name__ == '__main__':
         
         print('\nTraining...')
         surgical_model.train()
-        for i, (embed_, label_) in enumerate(trainset):
-            print("\t\tEpoch progress: {:.2f} %".format((i+1)/len(trainset)*100), 
-                  end = '\r')    
+        for i, data_loader in enumerate(trainset):
+            print("\t\tEpoch progress: {:.2f} %".format((i+1)/len(trainset)*100), end='\r')
             
-            embed_ = embed_.clone().detach().float().to(device)
-            label_ = label_.clone().detach().long().to(device).squeeze()
-            
-            optimizer.zero_grad()
-            
-            predict_ = surgical_model(embed_)
-            
-            error_batch = criteria(predict_, label_)
-            error_train[epoch] += error_batch 
-            
-            error_batch.backward()
-            optimizer.step()
+            # OP-wise
+            for time_, embed_, label_ in data_loader:  
+                # Data
+                time_ = time_.clone().detach().float().to(device)
+                embed_ = embed_.clone().detach().float().to(device).unsqueeze(-1)
+                label_ = label_.clone().detach().long().to(device).squeeze()
+
+                # Model
+                optimizer.zero_grad()
+                predict_ = surgical_model(embed_)
+                
+                # Loss
+                error_batch = 0
+                for s in range(args.num_stages):
+                    error_batch += criteria(predict_[s, :, :].squeeze(), label_)
+                error_train[epoch] += error_batch
+                
+                # Metrics
+                metrics_train.batch(label_, predict_[-1, :, :].squeeze())
+                
+                # BP    
+                error_batch.backward()
+                optimizer.step()
+
+            # Log OP
+            metrics_train.op_end(data_loader.dataset.op_name)
         
-        error_train[epoch] /= trainset.dataset.__len__()
+        # Train Log
+        error_train[epoch] /= trainset_size
         utils.print_log(f"\tTrain Loss\t: {error_train[epoch].item()}", log_txt, display=True)
+        metrics_train.epoch_end(epoch)
+        
         
         print('\nValidating...')
         surgical_model.eval()
-        for i, (embed_, label_) in enumerate(validset):
-            print("\t\tEpoch progress: {:.2f} %".format((i+1)/len(validset)*100), 
-                  end = '\r')    
+        for i, data_loader in enumerate(validset):
+            print("\t\tEpoch progress: {:.2f} %".format((i+1)/len(validset)*100), end='\r')
             
-            embed_ = embed_.clone().detach().float().to(device)
-            label_ = label_.clone().detach().long().to(device).squeeze()
+            # OP-wise
+            for time_, embed_, label_ in data_loader:   
+                # Data
+                time_ = time_.clone().detach().float().to(device)
+                embed_ = embed_.clone().detach().float().to(device).unsqueeze(-1)
+                label_ = label_.clone().detach().long().to(device).squeeze()
                 
-            with torch.no_grad():
-                predict_ = surgical_model(embed_)
+                # Model
+                with torch.no_grad():
+                    predict_ = surgical_model(embed_)
             
-            error_batch = criteria(predict_, label_)
-            error_valid[epoch] += error_batch
-            metrics_valid.batch(label_, predict_)
+                # Loss
+                error_batch = 0
+                for s in range(args.num_stages):
+                    error_batch += criteria(predict_[s, :, :].squeeze(), label_)
+                error_valid[epoch] += error_batch
+                
+                # Metrics
+                metrics_valid.batch(label_, predict_[-1, :, :].squeeze())
         
-        error_valid[epoch] /= validset.dataset.__len__()
-        utils.print_log(f"\tValidation Loss\t: {error_valid[epoch].item()}", log_txt, display=True)
-        metrics_valid.epoch_end(epoch)
+            # Log OP
+            metrics_valid.op_end(data_loader.dataset.op_name)
+            
+        # Validation Log
+        error_valid[epoch] /= validset_size
+        utils.print_log(f"\Validation Loss\t: {error_valid[epoch].item()}", log_txt, display=True)
         wandb.log({"error_valid": error_valid[epoch], "epoch": epoch})
+        metrics_valid.epoch_end(epoch)
               
-        # early stopper
+        # Early Stopper
         if error_valid[epoch] < best_loss:
             best_loss = error_valid[epoch]
             patience_escb = 0
@@ -174,6 +206,7 @@ if __name__ == '__main__':
             
         epoch += 1
 
+    metrics_train.eval_end('train')
     metrics_valid.eval_end('validation')
     
     # Log memory usage
