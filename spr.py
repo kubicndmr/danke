@@ -66,7 +66,8 @@ if __name__ == '__main__':
     ## Data
     trainset, validset, testset = data.get_dataset('/DATA/kubi/PoCaP_WhisperL3/',
                                                    log_txt,
-                                                   args.batch_size)
+                                                   args.batch_size,
+                                                   '/DATA/kubi/PoCaP_Synthetic')
     num_classes = 9
     
     ## Model
@@ -122,7 +123,7 @@ if __name__ == '__main__':
             print("\t\tEpoch progress: {:.2f} %".format((i+1)/len(trainset)*100), end='\r')
             
             # OP-wise
-            for time_, embed_, label_ in data_loader:  
+            for time_, embed_, label_ in data_loader:
                 # Data
                 time_ = time_.clone().detach().float().to(device)
                 embed_ = embed_.clone().detach().float().to(device).unsqueeze(-1)

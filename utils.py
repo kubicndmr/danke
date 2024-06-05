@@ -136,7 +136,7 @@ def save_args(args, filename):
         yaml.dump(params, file, default_flow_style=False)
     
 
-def data_split(data_path, log_txt = 'log.txt', split = 0.8):
+def data_split(data_path, log_txt='log.txt', split=0.8, synthetic_data_path=None):
     # read path
     ops = listdir(data_path, '.pkl')
 
@@ -154,6 +154,10 @@ def data_split(data_path, log_txt = 'log.txt', split = 0.8):
     trainset = ops[:-2*testset_size]
     validset = ops[-2*testset_size:-testset_size]
     testset = ops[-testset_size:]
+    
+    #synthetic
+    if synthetic_data_path != None:
+        trainset = trainset + listdir(synthetic_data_path, '.pkl')
     
     # log
     print_log("\tTrainset [{}] Data Channels\t: {}".format(len(trainset),
