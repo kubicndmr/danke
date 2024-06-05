@@ -56,12 +56,12 @@ if __name__ == '__main__':
     
     args = parser.parse_args()
     
-    ## wandb
-    wandb.init(project=args.project_name)
-    wandb.config.update(args)
-    
     ## Init output folder 
     output_path, log_txt = utils.init_log(args)
+    
+    ## wandb
+    wandb.init(name=output_path)
+    wandb.config.update(args)
     
     ## Data
     trainset, validset, testset = data.get_dataset('/DATA/kubi/PoCaP_WhisperL3/',
@@ -186,7 +186,7 @@ if __name__ == '__main__':
         # Validation Log
         error_valid[epoch] /= validset_size
         utils.print_log(f"\Validation Loss\t: {error_valid[epoch].item()}", log_txt, display=True)
-        wandb.log({"error_valid": error_valid[epoch], "epoch": epoch})
+        wandb.log({"error_train":error_train[epoch], "error_valid": error_valid[epoch]})
         metrics_valid.epoch_end(epoch)
               
         # Early Stopper
