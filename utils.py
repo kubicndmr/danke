@@ -174,8 +174,8 @@ def plot_error(error_train, error_valid, output_path):
     plt.rcParams['font.size'] = 18
         
     plt.figure(dpi=FIG_DPI, constrained_layout=True)
-    plt.plot(error_train, color='#084c61', label='Train')
-    plt.plot(error_valid, color='#ffc857', label='Valid')
+    plt.plot(error_train, color='#084c61', linewidth=2, label='Train')
+    plt.plot(error_valid, color='#a6382e', linewidth=2, label='Valid')
     plt.xlabel('Epochs', fontsize=16)
     plt.ylabel('MSE', fontsize=16)
     plt.legend(loc="upper right", fontsize=12)

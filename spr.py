@@ -99,7 +99,7 @@ if __name__ == '__main__':
     error_train = torch.zeros(args.epochs).to(device)
     error_valid = torch.zeros(args.epochs).to(device)
     early_stopper = False
-    patience_limit = 5
+    patience_limit = 10
     patience_escb = 0
     delta_escb = 0.001
     best_loss = 1E9
@@ -107,7 +107,6 @@ if __name__ == '__main__':
     
     trainset_size = np.sum([d_l.dataset.__len__() for d_l in trainset])
     validset_size = np.sum([d_l.dataset.__len__() for d_l in validset])
-    print(trainset_size, validset_size)
     
     # Iter epochs
     while (epoch < args.epochs) and (early_stopper == False):
@@ -210,7 +209,7 @@ if __name__ == '__main__':
     # Log
     metrics_train.eval_end('train')
     metrics_valid.eval_end('validation')
-    utils.plot_error(error_train, error_valid)
+    utils.plot_error(error_train, error_valid, output_path)
     
     # Log memory usage
     utils.print_log(torch.cuda.memory_summary(device=device), log_txt)
