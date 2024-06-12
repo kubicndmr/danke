@@ -17,7 +17,7 @@ class SPRDataset(Dataset):
         return len(self.data)
 
 
-def get_dataset(data_path, log_txt, batch_size, synthetic_data_path):
+def get_dataset(data_path, log_txt, batch_size, synthetic_data_path=None):
     datasets = []
     data_splits = utils.data_split(data_path, 
                                    log_txt, 

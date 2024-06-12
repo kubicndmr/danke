@@ -100,7 +100,7 @@ if __name__ == '__main__':
     error_train = torch.zeros(args.epochs).to(device)
     error_valid = torch.zeros(args.epochs).to(device)
     early_stopper = False
-    patience_limit = 10
+    patience_limit = 100
     patience_escb = 0
     delta_escb = 0.001
     best_loss = 1E9
@@ -193,12 +193,12 @@ if __name__ == '__main__':
         if error_valid[epoch] < best_loss:
             best_loss = error_valid[epoch]
             patience_escb = 0
-            torch.save({
-                'epoch': epoch + 1,
-                'model_state_dict': surgical_model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'loss': best_loss,
-            }, output_path + '/results/checkpoint.ckp')
+            #torch.save({
+            #    'epoch': epoch + 1,
+            #    'model_state_dict': surgical_model.state_dict(),
+            #    'optimizer_state_dict': optimizer.state_dict(),
+            #    'loss': best_loss,
+            #}, output_path + '/results/checkpoint.ckp')
         if error_valid[epoch] > best_loss + delta_escb:    
             patience_escb += 1
         if patience_escb > patience_limit:
