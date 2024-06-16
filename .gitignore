@@ -4,3 +4,6 @@ wandb
 __pycache__
 yenv
 Transcripts
+.env
+SynPoCaP_Part_1
+SynPoCaP_Part_2

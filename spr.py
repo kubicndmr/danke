@@ -46,13 +46,13 @@ if __name__ == '__main__':
                         type=int, default=256,
                         help='hidden vector size of model')
     
-    parser.add_argument('-nh', '--num_stages', 
-                        type=int, default=2,
-                        help='number of stages in MS-TCN')
+    parser.add_argument('-nh', '--num_head', 
+                        type=int, default=4,
+                        help='number of heads in MHA')
     
-    parser.add_argument('-ne', '--num_layers', 
-                        type=int, default=5,
-                        help='number of stacked layers within a TCN')
+    parser.add_argument('-ne', '--num_enc', 
+                        type=int, default=3,
+                        help='number of stacked encoders')
     
     args = parser.parse_args()
     
@@ -74,10 +74,10 @@ if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     surgical_model = model.SLPNet(
         model_dim=args.model_dim,
-        num_stages=args.num_stages,
-        num_layers=args.num_layers,
-        dropout_prob=args.dropout_prob,
-        num_classes=num_classes
+        num_head=args.num_head,
+        num_encoder=args.num_enc,
+        num_classes=num_classes,
+        dropout_prob=args.dropout_prob
     ).to(device)
     utils.print_log(surgical_model, log_txt)
     utils.print_log('Number of Parameters: {:,}'.format(sum(p.numel() 
@@ -100,7 +100,7 @@ if __name__ == '__main__':
     error_train = torch.zeros(args.epochs).to(device)
     error_valid = torch.zeros(args.epochs).to(device)
     early_stopper = False
-    patience_limit = 100
+    patience_limit = 20
     patience_escb = 0
     delta_escb = 0.001
     best_loss = 1E9
@@ -134,13 +134,11 @@ if __name__ == '__main__':
                 predict_ = surgical_model(embed_)
                 
                 # Loss
-                error_batch = 0
-                for s in range(args.num_stages):
-                    error_batch += criteria(predict_[s, :, :].squeeze(), label_)
+                error_batch = criteria(predict_, label_)
                 error_train[epoch] += error_batch
                 
                 # Metrics
-                metrics_train.batch(label_, predict_[-1, :, :].squeeze())
+                metrics_train.batch(label_, predict_)
                 
                 # BP    
                 error_batch.backward()
@@ -172,13 +170,11 @@ if __name__ == '__main__':
                     predict_ = surgical_model(embed_)
             
                 # Loss
-                error_batch = 0
-                for s in range(args.num_stages):
-                    error_batch += criteria(predict_[s, :, :].squeeze(), label_)
+                error_batch = criteria(predict_, label_)
                 error_valid[epoch] += error_batch
                 
                 # Metrics
-                metrics_valid.batch(label_, predict_[-1, :, :].squeeze())
+                metrics_valid.batch(label_, predict_)
         
             # Log OP
             metrics_valid.op_end(data_loader.dataset.op_name)

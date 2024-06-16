@@ -1,3 +1,4 @@
+import torch
 import utils
 import pandas as pd
 
@@ -10,7 +11,7 @@ class SPRDataset(Dataset):
 
     def __getitem__(self, index):
         return [self.data['Start_Time'].iloc[index],
-                self.data['Embeddings'].iloc[index],
+                torch.FloatTensor(self.data['Embeddings'].iloc[index]),
                 self.data['Phase_Label'].iloc[index]]
 
     def __len__(self):

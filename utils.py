@@ -14,6 +14,22 @@ from datetime import datetime
 plt.rcParams["font.family"] = "Times New Roman"
 FIG_DPI=100
 
+def prefix(id, name = '', buffer = 3):
+    '''
+    Creates prefix padded with zeros, e.g., name001
+    
+    id              : int
+                        Number to be padded
+
+    name            : string
+                        Prefix
+
+    buffer          : int
+                        Length of numbers including zeros
+    '''
+    return name + str(id).zfill(buffer)
+
+
 def print_log(text, file_name = 'log.txt', 
               ends_with = '\n', display = False):
     '''

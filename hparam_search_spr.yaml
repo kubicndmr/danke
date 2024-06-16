@@ -7,9 +7,9 @@ parameters:
   project_name:
     value: 'SPR'
   training_tag:
-    value: 'hparam_tuning'
+    value: 'hparam_tuning_syn10_openai_transformer'
   epochs:
-    value: 150
+    value: 500
   batch_size:
     values: [64, 128, 256]
   dropout_prob:
@@ -20,8 +20,8 @@ parameters:
     values: [1e-7, 5e-7, 1e-6, 5e-6]
   model_dim:
     values: [128, 256, 512, 1024]
-  num_stages:
-    values: [1, 2, 3]
-  num_layers:
-    values: [3, 5, 7]
-run_cap: 10
+  num_head:
+    values: [2, 3, 4, 5, 7]
+  num_enc:
+    values: [1, 2, 3, 4]
+run_cap: 15
