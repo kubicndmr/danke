@@ -67,7 +67,8 @@ if __name__ == '__main__':
     trainset, validset, testset = data.get_dataset('/DATA/kubi/PoCaP_WhisperL3/',
                                                    log_txt,
                                                    args.batch_size,
-                                                   '/DATA/kubi/PoCaP_Synthetic')
+                                                   #'/DATA/kubi/PoCaP_Synthetic')
+                                                   '/DATA/kubi/SynPoCaP')
     num_classes = 9
     
     ## Model

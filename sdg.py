@@ -1,7 +1,5 @@
 import os
-import sys
 import time
-import json
 import random
 import openai
 import numpy as np
@@ -10,45 +8,24 @@ import pandas as pd
 from dotenv import load_dotenv
 
 
-## Functions
-def time2sec(time_str, return_ms=False):
-    '''
-    Converts hh:mm:ss or hh:mm:ss,ms
-    to seconds or miliseconds
-
-    sec             : String
-                        Time
-    return_ms       : Bool
-                        Wheter return miliseconds
-    '''
-    if len(time_str.split(",")) == 2:
-        hms = time_str.split(",")[0]
-        hours = int(hms.split(":")[0])
-        minutes = int(hms.split(":")[1])
-        seconds = int(hms.split(":")[2])
-        miliseconds = int(time_str.split(",")[1])
-    else:
-        hours = int(time_str.split(":")[0])
-        minutes = int(time_str.split(":")[1])
-        seconds = int(time_str.split(":")[2])
-        miliseconds = 0
-    
-    total_seconds = hours * 3600 + minutes * 60 + seconds
-
-    if return_ms:
-        return total_seconds * 1000 + miliseconds
-    else:
-        return total_seconds
-    
-    
+## Functions    
 def prefix(id, name='', buffer=3):
     return name + str(id).zfill(buffer)
 
 
-def get_answer(client, gpt_model, messages):
+def get_answer(client, gpt_model, messages, temperature,
+               max_tokens=4000, presence_penalty=0.1):
+    '''
+    Calls the API and returns the asnwer
+    
+    For parameters, see: https://platform.openai.com/docs/api-reference/chat/create
+    '''
     answer = client.chat.completions.create(
         model=gpt_model,
-        messages=messages
+        messages=messages,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        presence_penalty=presence_penalty
     )
     print(f"\tUsed Tokens: {answer.usage.total_tokens}")
     messages.append({"role": "assistant", "content": answer.choices[0].message.content})
@@ -73,24 +50,33 @@ def get_tagged_block(answer, start_tag, end_tag):
 
 def block_to_df(block):
     rows = []
-    columns = block[0].split(',')[1:] #ignore index
-    text_end_idx = 2 - len(columns)
+    
+    columns = block[0].split(',')  
+    text_end_idx = 3 - len(columns)
+    
     for line in block[1:]:
-        line = line.split(',')[1:]
-        row = [line[0]]
-        text = ''.join(line[1:text_end_idx])
+        line = line.split(',')
+        row = [line[0], line[1]]
+        text = ''.join(line[2:text_end_idx])
         row.append(text.strip('"'))
         for item in line[text_end_idx:]:
             row.append(item)
         rows.append(row)
-    return pd.DataFrame(rows, columns=columns)
+    
+    # Create the DataFrame
+    df = pd.DataFrame(rows, columns=columns)
+    
+    # Set the first column as the index
+    df['Index'] = df['Index'].apply(pd.to_numeric)
+    df.set_index('Index', inplace=True)
+    
+    return df
 
 
-def insert_empty_rows(input_df, min_phase=10, beta=0.5):
+def insert_empty_rows(input_df, min_phase=10, beta=0.4):
     '''
     Adds empty rows to given DataFrame considering the
-    number of sentences in each phase and distribution
-    of durations 
+    number of sentences in each phase and total length
 
     input_df        : DataFrame
                         DataFrame with surgery releated sentences
@@ -99,8 +85,9 @@ def insert_empty_rows(input_df, min_phase=10, beta=0.5):
     beta            : Float
                         Percentage of the total length of the DataFrame 
                         to be added as empty rows. Can be exceed due to 
-                        min_phase value. 
+                        min_phase value.
     '''
+    tag = "<Füll aus>"
     subt_length = int(len(input_df)*beta)
     
     to_insert = {label: max(0, min_phase-count) 
@@ -116,32 +103,23 @@ def insert_empty_rows(input_df, min_phase=10, beta=0.5):
             N = to_insert[str(label)]
             random_positions = np.random.choice(np.arange(1,len(pdf)+N+1), size=N, replace=False)
             for pos in random_positions:
-                empty_row = pd.DataFrame({'Start_Time': [np.nan], 'Text': 'NaN', 'Phase_Label': label})
+                empty_row = pd.DataFrame({'Start_Time': [np.nan], 'Text': tag, 'Phase_Label': label})
                 pdf = pd.concat([pdf.iloc[:pos], empty_row, pdf.iloc[pos:]]).reset_index(drop=True)
             
             dfs.append(pdf)
 
     df = pd.concat(dfs, ignore_index=True)
     
-    # Fill Start_Time column
-    df['Start_Time'] = df['Start_Time'].astype(float)
-    nan_indices = df[df['Start_Time'].isna()].index
-    
-    for idx in nan_indices:
-        upper_value = df['Start_Time'].loc[:idx].ffill().iloc[-1]
-        lower_value = df['Start_Time'].loc[idx:].bfill().iloc[0]
-        random_value = np.random.uniform(upper_value, lower_value)
-        df.at[idx, 'Start_Time'] = random_value
-    
+    # Fill Start_Time column -> TODO could better,i.e., sample random value between previous and next value
     df['Start_Time'] = df['Start_Time'].apply(pd.to_numeric)
-    df['Start_Time'] = df['Start_Time'].apply(add_random_value)
+    df['Start_Time'] = df['Start_Time'].ffill()
+    df['Start_Time'] = df['Start_Time'].apply(lambda x: x + np.random.uniform())
     df['Start_Time'] = df['Start_Time'].round(2)
     
-    return df
-
-
-def add_random_value(x):
-    return x + np.random.rand()*0.1
+    df.reset_index(drop=True, inplace=True)
+    
+    empty_rows = df[df['Text'] == tag]
+    return df, empty_rows
 
 
 def listdir(path, ending=None):
@@ -153,142 +131,118 @@ def listdir(path, ending=None):
                        if f.endswith(ending)])
         
 
-def get_phase_dist(annot_file, trainset):
-    phase_dur = np.zeros((len(trainset),9))
-    op_idx = 0
-    
-    with open(annot_file) as f:
-        annots = json.load(f)
-        
-        for annot in annots:
-            if annot[0]+'.csv' in trainset:
-                time_stamps = annot[3]
-                phases = annot[4]
-                
-                for p, t in zip(phases, time_stamps):
-                    t = t.split('-')
-                    t_start = time2sec(t[0])
-                    t_end = time2sec(t[1]) + 1
-                    if p == 'Preparation':
-                        phase_dur[op_idx, 0] += t_end - t_start
-                    if p == 'Puncture':
-                        phase_dur[op_idx, 1] += t_end - t_start
-                    if p == 'GuideWire':
-                        phase_dur[op_idx, 2] += t_end - t_start
-                    if p == 'CathPlacement':
-                        phase_dur[op_idx, 3] += t_end - t_start
-                    if p == 'CathPositioning':
-                        phase_dur[op_idx, 4] += t_end - t_start
-                    if p == 'CathAdjustment':
-                        phase_dur[op_idx, 5] += t_end - t_start
-                    if p == 'CathControl':
-                        phase_dur[op_idx, 6] += t_end - t_start
-                    if p == 'Closing':
-                        phase_dur[op_idx, 7] += t_end - t_start
-                    if p == 'Transition':
-                        phase_dur[op_idx, 8] += t_end - t_start
-                    
-                op_idx += 1
-                        
-    mean_values = np.mean(phase_dur, axis=0)
-    std_values = np.std(phase_dur, axis=0)
-    
-    mean_dict = {key: value for key, value in zip(range(8), mean_values)}
-    std_dict = {key: value for key, value in zip(range(8), std_values)}
-    
-    return [mean_dict, std_dict]
-    
-      
-def gen_data():
-    # Step 1
-    role = """Ich bin ein Chirurg in der Radilogie, der die Port-Katheter Platzierung Operationen durchführt. Ich spreche mit dem Assitent und dem Patient während der Operation."""
-        
-    prompt = """Deine Aufgabe ist es, Gespräche eines Chirurgen mit dem medizinischen Assistenten und dem Patienten während einer Port-Katheter-Platzierung zu generieren. Du wirst deine Daten in einem konsistenten Stil mit dem unten angegebenen Beispiel generieren. Die generierten Daten werden für das Training eines textbasierten Deep-Learning-Modells verwendet, das für die Schätzung der chirurgischen Phasen der Port-Katheter-Placement-Operation entwickelt wurde.
-    
-Führe die folgenden Aktionen durch, um eine neue Daten zu erstellen:
-
-1. Das Legen eines Portkatheters ist eine minimalinvasive Operation in der Radiologie und besteht aus acht Phasen. Erläutere diese Phasen mit je einem Satz im <Antwort 1> Bereich.
-<Antwort 1>
-0. 
-1. 
-2. 
-3. 
-4. 
-5. 
-6.  
-7. 
-<\Antwort 1>
-
-2. Analysiere jeden Satz in der Spalte „Text“ der unten angegebenen Beispieldaten <Antwort 2> und bestimme, ob die Sätze für die Erkennung der in der Spalte „Phase_Label“ angegebenen chirurgischen Phasen wichtig sind. Verwende die <Antwort 2> als Vorlage und fülle die leere Spalte 'Relevanz' aus, indem Sie 'P' für Sätze, die für die Erkennung chirurgischer Phasen relevant sind, und 'D' für Sätze, die im Kontext einer täglichen Unterhaltung stehen, eintragen. Gebe deine Antwort in den Bereich <Antwort 2> ein. Antworte nur im CSV-Format, getrennt durch Komma.
-"""
-    random.shuffle(transcripts)
-    df = pd.read_csv(transcripts[0], index_col=0)
-    df["Relevance"] = ""
-    df = df.drop(columns=['File_Name', 'End_Time'])
+def drop_sentences(df, beta=0.2):
+    '''
+    This functions removes randomly selected rows from given dataframe.
+    df              : DataFrame
+                        DataFrame with surgery releated sentences
+    beta            : Float
+                        Percentage of the total length of the DataFrame
+                        to keep
+    '''
+    df = df.drop(columns=['File_Name', 'End_Time'], errors='ignore')
     df = df[df['Text'] != '<nicht verstanden>']
     df = df[df['Phase_Label'] != '8']
-    prompt = prompt + f"\n<Antwort 2>\n{df.to_csv()}<\Antwort 2>"
+    return df.drop(df.sample(n=int(len(df)*beta)).index)   
+
+      
+def gen_data(client, gpt_model, sample_data):
+    '''
+    Generates synthetic data
     
+    sample_data    : String
+                        Path to example data
+    '''    
+    # Step 1
+    print('\tStep 1:', end='')
+    role = """Ich bin ein Chirurg in der Radilogie, der die Port-Katheter Platzierung Operationen durchführt."""
+    prompt = """Deine Aufgabe ist es, Gespräche eines Chirurgen mit dem medizinischen Assistenten und dem Patienten während einer Port-Katheter-Platzierung zu generieren. Du wirst deine Daten in einem konsistenten Stil mit dem unten angegebenen Beispiel generieren. Die generierten Daten werden für das Training eines textbasierten Deep-Learning-Modells verwendet, das für die Schätzung der chirurgischen Phasen der Port-Katheter-Placement-Operation entwickelt wurde. alle Gespräche müssen nur auf Deutsch geführt werden.
+    
+Führe die folgenden drei Aktionen durch, um eine neue Daten zu erstellen:
+
+*1. Das Legen eines Portkatheters ist eine minimalinvasive Operation in der Radiologie und besteht aus acht Phasen. Erläutere diese Phasen mit je einem Satz im <Antwort 1> Bereich.
+<Antwort 1>
+Phase_Label, Beschreibung
+0, 
+1, 
+2, 
+3, 
+4, 
+5, 
+6,  
+7, 
+<\Antwort 1>
+"""
     messages=[{"role": "system", "content": role}, {"role": "user", "content":prompt}]
-    messages, answer = get_answer(client, gpt_model, messages)
-    
+    messages, answer_1 = get_answer(client, gpt_model, messages, temperature=0.1)
+
+    with open('prompt_1.txt', 'w') as f:
+        print(prompt, file=f)
+    with open('answer_1.txt', 'w') as f:
+        print(answer_1, file=f)
+
     # Step 2
-    answer_2 = get_tagged_block(answer, '<Antwort 2>', '<\Antwort 2>')
-    answer_2 = block_to_df(answer_2)
-    answer_2 = answer_2[answer_2['Relevance'] != 'D']
-    answer_2 = answer_2.drop(columns=['Relevance'])
-        
-    prompt = f"""3. Jetzt hast du die Daten ohne tägliche Gespräche, wie sie im Bereich <Daten> dargestellt sind. 
-<Daten>
-{answer_2.to_csv()}
-<\Daten>
-
-Verwende diese Daten als Vorlage. Erstelle neue, eigene Daten, indem du den Gesprächen in diesen Daten folgst. Reproduziere die Ereignisse, die in den Daten vorkommen, aber drücke dich mit deinen eigenen Sätzen aus. Fülle die Spalten Start_Time und Phase_Label entsprechend aus. Gebe deine Antwort im Abschnitt <Antwort 3> an und füge so viele Datenzeilen wie nötig hinzu. Antworte nur im CSV-Format, getrennt durch Komma.
-<Antwort 3>
+    print('\tStep 2:', end='')
+    prompt = """*2. Du erhaltest einen Datensatz mit einer Reihe von Sätzen im Abschnitt <Daten>. Die Daten enthalten einen Index, die Startzeit der Rede, den gesprochenen Satz und eine Bezeichnung für die Operationsphase. Als ein Chirurg, schreibe diese Sätze in der Spalte "Text" um, um die Ereignisse im Text wiederzugeben, aber drücke dich mit deinen eigenen Sätzen aus. Generiere deinen eigenen Sätzen (nicht mit Passivsätzen in der dritten Person). Verwende für deine Antwort die Vorlage , die Sie im Abschnitt <Antwort 2> finden. Antworte nur im CSV-Format mit <Antwort 2> Tags, getrennt durch Komma."""
+    
+    data_1 = pd.read_csv(sample_data, index_col=0)
+    data_1 = drop_sentences(data_1, beta=np.random.uniform(0.2, 0.4))
+    data_1.reset_index(drop=True, inplace=True)
+    prompt = prompt + f"\n<Daten>\n{data_1.to_csv(index=True, index_label='Index')}<\Daten>"
+    prompt = prompt + """\n\nDeine Antwort:
+<Antwort 2>
 Index,Start_Time,Text,Phase_Label
 0,
 1,
 2,
 3,
-4,
 ...
-<\Antwort 3>
-"""
+<\Antwort 2>
+""" 
     messages.append({"role": "user", "content":prompt})
-    messages, answer = get_answer(client, gpt_model, messages)
-            
-    # step 4
-    answer_3 = get_tagged_block(answer, '<Antwort 3>', '<\Antwort 3>')
-    answer_3 = block_to_df(answer_3)
-    answer_3 = insert_empty_rows(answer_3)
+    messages, answer_2 = get_answer(client, gpt_model, messages, temperature=0.2)
+
+    with open('prompt_2.txt', 'w') as f:
+        print(prompt, file=f)
+    with open('answer_2.txt', 'w') as f:
+        print(answer_2, file=f)
         
-    prompt = f"""4. Eine erweiterte Version der Daten ist unten im Abschnitt <Daten> mit fehlenden Gesprächen angegeben.
-<Daten>
-{answer_3.to_csv(na_rep='NaN')}
-<\Daten>
+    # Step 2
+    print('\tStep 3:', end='')
+    data_2 = get_tagged_block(answer_2, '<Antwort 2>', '<\Antwort 2>')
+    data_2 = block_to_df(data_2)
+    data_2, empty_rows = insert_empty_rows(data_2, beta=np.random.uniform(0.3, 0.7))
+    
+    prompt = """*3. Der Datensatz aus dem vorherigen Schritt hat sich um neue Zeilen erweitert. Deine Aufgabe ist es, die Spalte "Text" dieser Zeilen zu füllen. Fülle diese Zeilen in der Spalte 'Text' als der Chirurg mit deinen eigenen Sätzen (nicht mit Passivsätzen in der dritten Person) unter Berücksichtigung der Phasenbezeichnungen und des Kontexts. Verwende für deine Antwort die Vorlage der leeren Zeilen, die Sie im Abschnitt <Antwort 3> finden. Antworte nur im CSV-Format mit <Antwort 3> Tags, getrennt durch Komma."""
+    prompt = prompt + f"\n\nDeine Antwort:\n<Antwort 3>\n{empty_rows.to_csv(index=True, index_label='Index')}<\Antwort 3>"
 
-Fülle die Textfelder, die NaN-Werten haben, mit tatsächlichen Gesprächen. Ahmen Sie den Sprachstil in den Daten nach. Jedes Gespräch muss auf Deutsch sein. Geben Sie Ihre Antwort im Abschnitt <Antwort 4>. Antworte nur im CSV-Format, getrennt durch Komma.
-
-<Antwort 4>
-Index,Start_Time,Text,Phase_Label
-0,
-1,
-2,
-3,
-4,
-...
-<\Antwort 4>
-"""
     messages.append({"role": "user", "content":prompt})
-    messages, answer = get_answer(client, gpt_model, messages)
+    messages, answer_3 = get_answer(client, gpt_model, messages, temperature=0.5)
+    
+    with open('prompt_3.txt', 'w') as f:
+        print(prompt, file=f)
+    with open('answer_3.txt', 'w') as f:
+        print(answer_3, file=f)
         
     # Get answer  
-    result = get_tagged_block(answer, '<Antwort 4>', '<\Antwort 4>')    
-    df = block_to_df(result)
+    data_3 = get_tagged_block(answer_3, '<Antwort 3>', '<\Antwort 3>')
+    data_3 = block_to_df(data_3)
+    
+    # Result
+    result = pd.concat([data_2, data_3])
+    result = result[result['Text'] != '<Füll aus>']
+    result = result.sort_index()
 
-    return df, messages
+    os.remove('prompt_1.txt')
+    os.remove('answer_1.txt')
+    os.remove('prompt_2.txt')
+    os.remove('answer_2.txt')
+    os.remove('prompt_3.txt')
+    os.remove('answer_3.txt')
+
+    return result, messages
         
-            
+
 ## Code
 if __name__ == "__main__":
     # Target folder
@@ -297,50 +251,66 @@ if __name__ == "__main__":
         os.mkdir(target_path)
 
     # Variables
-    num_target = 50
-    idx = len(listdir(target_path ,ending='.pkl'))
-
+    num_target = 500
+    idx = len(listdir(target_path ,ending='.csv'))
+    error_patience = 3
+    error_count = 0
+    org_syn_limit = 2 # how many original data to use before using a synthetic data for new generation
+    org_syn_count = 0
+    
     # Load environment
     load_dotenv()
     openai.api_key = os.getenv("OPENAI_API_KEY")
 
     # Get openai client
     client = openai.OpenAI()
-    gpt_model = "gpt-4o" #"gpt-3.5-turbo-0125"
+    gpt_model = "gpt-3.5-turbo-0125" 
 
     # Read data
     data_path = 'Transcripts/'
     trainset = ['OP_009.csv', 'OP_012.csv', 'OP_033.csv', 'OP_034.csv', 
                 'OP_026.csv', 'OP_029.csv', 'OP_025.csv', 'OP_036.csv', 
-                'OP_017.csv', 'OP_013.csv', 'OP_016.csv', 'OP_030.csv', 
-                'OP_005.csv', 'OP_040.csv', 'OP_031.csv']
-    transcripts = [os.path.join(data_path, f) for f in trainset]
-
-    # Generate data
-    while idx <= num_target:
+                'OP_017.csv', 'OP_013.csv', 'OP_030.csv', 
+                'OP_005.csv', 'OP_040.csv', 'OP_031.csv'] # some bad ops removed
+    org_dataset = [os.path.join(data_path, f) for f in trainset]
+    syn_dataset = listdir(target_path, ending='.csv')
+    
+    while idx <= num_target and error_count < error_patience:
         print(target_path + prefix(idx+1, 'SynOP_') + ".csv")
         
-        try:
-            # generate data
-            first_call = time.time()
-            df, messages = gen_data()
+        # select sample data
+        if org_syn_count < org_syn_limit:
+            random.shuffle(org_dataset)
+            sample_data = org_dataset[0]
+            org_syn_count += 1
+        else:
+            random.shuffle(syn_dataset)
+            sample_data = syn_dataset[0]
+            org_syn_count = 0
         
-            # Save answer
-            df.to_csv(target_path + prefix(idx+1, 'SynOP_') + ".csv", index=False)
+        # generate data, save and log
+        try:
+            first_call = time.time()
+            df, messages = gen_data(client, gpt_model, sample_data)
+
+            df.to_csv(target_path + prefix(idx+1, 'SynOP_') + ".csv")
+            syn_dataset.append(target_path + prefix(idx+1, 'SynOP_') + ".csv")
             
-            # Save messages
             with open(target_path + prefix(idx+1, 'SynOP_') + ".txt", "w") as text_file:
-                text_file.write('Refence Data:'+transcripts[0]+'\n')
+                text_file.write('Refence Data:'+sample_data+'\n')
                 for m in messages:
                     text_file.write('\n'+'*'*50+' <'+m['role']+'> '+'*'*50+'\n')
                     text_file.write(m['content'])
+                error_count = 0
             
-            #index increment
             idx += 1
+        
+        # opps
         except:
             print(target_path + prefix(idx+1, 'SynOP_') + ".csv could not generated")
             print('Trying again!')
+            error_count += 1
             
         # wait for TPM limit‚
         print("waiting...\n")
-        time.sleep(max(60 - time.time() + first_call, 0))
+        #time.sleep(max(60 - time.time() + first_call, 0))
