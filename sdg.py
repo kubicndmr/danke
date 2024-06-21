@@ -183,10 +183,10 @@ Phase_Label, Beschreibung
 
     # Step 2
     print('\tStep 2:', end='')
-    prompt = """*2. Du erhaltest einen Datensatz mit einer Reihe von Sätzen im Abschnitt <Daten>. Die Daten enthalten einen Index, die Startzeit der Rede, den gesprochenen Satz und eine Bezeichnung für die Operationsphase. Als ein Chirurg, schreibe diese Sätze in der Spalte "Text" um, um die Ereignisse im Text wiederzugeben, aber drücke dich mit deinen eigenen Sätzen aus. Generiere deinen eigenen Sätzen (nicht mit Passivsätzen in der dritten Person). Verwende für deine Antwort die Vorlage , die Sie im Abschnitt <Antwort 2> finden. Antworte nur im CSV-Format mit <Antwort 2> Tags, getrennt durch Komma."""
+    prompt = """*2. Du erhaltest einen Datensatz mit einer Reihe von Sätzen im Abschnitt <Daten>. Die Daten enthalten einen Index, die Startzeit der Rede, den gesprochenen Satz und eine Bezeichnung für die Operationsphase. Als ein Chirurg, schreibe diese Sätze in der Spalte "Text" um, um die Ereignisse im Text wiederzugeben, aber drücke dich mit deinen eigenen Sätzen aus. Generiere deinen eigenen Sätzen (nicht mit Passivsätzen in der dritten Person). Verwende für deine Antwort die Vorlage mit Spaltennamen, die Sie im Abschnitt <Antwort 2> finden. Antworte nur im CSV-Format mit <Antwort 2> Tags, getrennt durch Komma."""
     
     data_1 = pd.read_csv(sample_data, index_col=0)
-    data_1 = drop_sentences(data_1, beta=np.random.uniform(0.2, 0.4))
+    data_1 = drop_sentences(data_1, beta=np.random.uniform(0.4, 0.6))
     data_1.reset_index(drop=True, inplace=True)
     prompt = prompt + f"\n<Daten>\n{data_1.to_csv(index=True, index_label='Index')}<\Daten>"
     prompt = prompt + """\n\nDeine Antwort:
@@ -200,7 +200,7 @@ Index,Start_Time,Text,Phase_Label
 <\Antwort 2>
 """ 
     messages.append({"role": "user", "content":prompt})
-    messages, answer_2 = get_answer(client, gpt_model, messages, temperature=0.2)
+    messages, answer_2 = get_answer(client, gpt_model, messages, temperature=0.25)
 
     with open('prompt_2.txt', 'w') as f:
         print(prompt, file=f)
@@ -211,13 +211,13 @@ Index,Start_Time,Text,Phase_Label
     print('\tStep 3:', end='')
     data_2 = get_tagged_block(answer_2, '<Antwort 2>', '<\Antwort 2>')
     data_2 = block_to_df(data_2)
-    data_2, empty_rows = insert_empty_rows(data_2, beta=np.random.uniform(0.3, 0.7))
+    data_2, empty_rows = insert_empty_rows(data_2, beta=np.random.uniform(0.5, 0.8))
     
     prompt = """*3. Der Datensatz aus dem vorherigen Schritt hat sich um neue Zeilen erweitert. Deine Aufgabe ist es, die Spalte "Text" dieser Zeilen zu füllen. Fülle diese Zeilen in der Spalte 'Text' als der Chirurg mit deinen eigenen Sätzen (nicht mit Passivsätzen in der dritten Person) unter Berücksichtigung der Phasenbezeichnungen und des Kontexts. Verwende für deine Antwort die Vorlage der leeren Zeilen, die Sie im Abschnitt <Antwort 3> finden. Antworte nur im CSV-Format mit <Antwort 3> Tags, getrennt durch Komma."""
     prompt = prompt + f"\n\nDeine Antwort:\n<Antwort 3>\n{empty_rows.to_csv(index=True, index_label='Index')}<\Antwort 3>"
 
     messages.append({"role": "user", "content":prompt})
-    messages, answer_3 = get_answer(client, gpt_model, messages, temperature=0.5)
+    messages, answer_3 = get_answer(client, gpt_model, messages, temperature=0.75)
     
     with open('prompt_3.txt', 'w') as f:
         print(prompt, file=f)
@@ -251,12 +251,10 @@ if __name__ == "__main__":
         os.mkdir(target_path)
 
     # Variables
-    num_target = 500
+    num_target = 200
     idx = len(listdir(target_path ,ending='.csv'))
     error_patience = 3
     error_count = 0
-    org_syn_limit = 2 # how many original data to use before using a synthetic data for new generation
-    org_syn_count = 0
     
     # Load environment
     load_dotenv()
@@ -272,21 +270,14 @@ if __name__ == "__main__":
                 'OP_026.csv', 'OP_029.csv', 'OP_025.csv', 'OP_036.csv', 
                 'OP_017.csv', 'OP_013.csv', 'OP_030.csv', 
                 'OP_005.csv', 'OP_040.csv', 'OP_031.csv'] # some bad ops removed
-    org_dataset = [os.path.join(data_path, f) for f in trainset]
-    syn_dataset = listdir(target_path, ending='.csv')
+    trainset = [os.path.join(data_path, f) for f in trainset]
     
     while idx <= num_target and error_count < error_patience:
         print(target_path + prefix(idx+1, 'SynOP_') + ".csv")
         
         # select sample data
-        if org_syn_count < org_syn_limit:
-            random.shuffle(org_dataset)
-            sample_data = org_dataset[0]
-            org_syn_count += 1
-        else:
-            random.shuffle(syn_dataset)
-            sample_data = syn_dataset[0]
-            org_syn_count = 0
+        random.shuffle(trainset)
+        sample_data = trainset[0]
         
         # generate data, save and log
         try:
@@ -294,7 +285,7 @@ if __name__ == "__main__":
             df, messages = gen_data(client, gpt_model, sample_data)
 
             df.to_csv(target_path + prefix(idx+1, 'SynOP_') + ".csv")
-            syn_dataset.append(target_path + prefix(idx+1, 'SynOP_') + ".csv")
+            trainset.append(target_path + prefix(idx+1, 'SynOP_') + ".csv")
             
             with open(target_path + prefix(idx+1, 'SynOP_') + ".txt", "w") as text_file:
                 text_file.write('Refence Data:'+sample_data+'\n')
@@ -305,7 +296,7 @@ if __name__ == "__main__":
             
             idx += 1
         
-        # opps
+        # uppps
         except:
             print(target_path + prefix(idx+1, 'SynOP_') + ".csv could not generated")
             print('Trying again!')
