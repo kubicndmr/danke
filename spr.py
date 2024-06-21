@@ -68,7 +68,7 @@ if __name__ == '__main__':
                                                    log_txt,
                                                    args.batch_size,
                                                    #'/DATA/kubi/PoCaP_Synthetic')
-                                                   '/DATA/kubi/SynPoCaP')
+                                                   '/home/kubi/Desktop/sdg/SynPoCaP')
     num_classes = 9
     
     ## Model
