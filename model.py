@@ -113,7 +113,7 @@ class SLPNet(nn.Module):
         
         self.embed_in = nn.Sequential(
             nn.Conv1d(
-                in_channels=3072,
+                in_channels=1024,
                 out_channels=model_dim, 
                 kernel_size=1
             ),

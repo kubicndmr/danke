@@ -64,12 +64,11 @@ if __name__ == '__main__':
     wandb.config.update(args)
     
     ## Data
-    trainset, validset, testset = data.get_dataset(#'/DATA/kubi/PoCaP_WhisperL3/',
-                                                   '/home/kubi/Desktop/sdg/GPTPoCaP',
+    trainset, validset, testset = data.get_dataset('/DATA/kubi/PoCaP/',
                                                    log_txt,
                                                    args.batch_size,
-                                                   #'/DATA/kubi/PoCaP_Synthetic')
-                                                   '/home/kubi/Desktop/sdg/SynPoCaP')
+                                                   None)
+                                                   #'/DATA/kubi/SynPoCaP/')
     num_classes = 9
     
     ## Model
@@ -124,6 +123,7 @@ if __name__ == '__main__':
         for i, data_loader in enumerate(trainset):
             print("\t\tEpoch progress: {:.2f} %".format((i+1)/len(trainset)*100), end='\r')
             
+            #print(data_loader.dataset.op_name)
             # OP-wise
             for time_, embed_, label_ in data_loader:
                 # Data
