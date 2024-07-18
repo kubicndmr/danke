@@ -64,7 +64,8 @@ if __name__ == '__main__':
     wandb.config.update(args)
     
     ## Data
-    trainset, validset, testset = data.get_dataset('/DATA/kubi/PoCaP_WhisperL3/',
+    trainset, validset, testset = data.get_dataset(#'/DATA/kubi/PoCaP_WhisperL3/',
+                                                   '/home/kubi/Desktop/sdg/GPTPoCaP',
                                                    log_txt,
                                                    args.batch_size,
                                                    #'/DATA/kubi/PoCaP_Synthetic')
