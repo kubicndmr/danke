@@ -1,5 +1,6 @@
 import torch
 import utils
+import numpy as np
 import pandas as pd
 
 from torch.utils.data import Dataset, DataLoader
@@ -18,7 +19,13 @@ class SPRDataset(Dataset):
         df = pd.read_pickle(data_path)
         if len(df) % batch_size == 1:
             df = df.iloc[:-1]
-        return df            
+        return df
+    
+    def phase_count(self):
+        array_count = np.zeros(8, dtype=int)
+        phases = self.data['Phase_Label'].value_counts().drop(8, errors='ignore')
+        array_count[phases.index] = phases.values
+        return array_count
 
     def __len__(self):
         return len(self.data)

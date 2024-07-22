@@ -1,3 +1,4 @@
+import os
 import utils
 import torch
 import numpy as np
@@ -16,6 +17,7 @@ class SPRMetrics:
         self.output_path = output_path
         self.log_txt = log_txt
         
+        self.epoch = 0
         self.op_gt = []
         self.op_pr = []
         self.op_metrics = []
@@ -34,7 +36,7 @@ class SPRMetrics:
         self.op_gt.append(ground_truth.cpu().numpy())
         self.op_pr.append(predicted.cpu().numpy())
 
-    def op_end(self, op_name):
+    def op_end(self, op_name, plot_ribbon=False):
         # Convert lists to numpy arrays
         ground_truth = np.concatenate(self.op_gt)
         prediction = np.concatenate(self.op_pr)
@@ -55,6 +57,13 @@ class SPRMetrics:
         }
         self.op_metrics.append(metrics)
         
+        # Plot ribbon 
+        if plot_ribbon:
+            save_dir = self.output_path + f"results/ribbons/Epoch_{self.epoch}/"
+            if not os.path.exists(save_dir):
+                os.mkdir(save_dir)
+            utils.plot_ribbon(prediction, op_name, save_dir)
+            
         # Reset memory
         self.op_gt = []
         self.op_pr = []
@@ -74,6 +83,7 @@ class SPRMetrics:
 
         # Reset memory
         self.op_metrics = []
+        self.epoch += 1
     
     def eval_end(self, mode):
         plt.rcParams['font.family'] = 'Times New Roman'
@@ -82,7 +92,10 @@ class SPRMetrics:
         plt.figure(dpi=100, constrained_layout=True)
         for i, metric in enumerate(self.metric_keys):
             plt.plot(utils.remove_tailzeros(self.all_metrics[:, i]), label=metric)
-            
+            utils.print_log(f"[{mode}]\tMax {metric} is: {np.max(self.all_metrics[:, i])}",
+                            self.log_txt,
+                            display=True)
+        
         plt.xlabel('Epochs', fontsize=18)
         plt.legend(loc="upper left", fontsize=12)
         plt.savefig(self.output_path+f'results/{mode}_metrics.jpg')

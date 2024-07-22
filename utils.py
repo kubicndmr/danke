@@ -1,18 +1,19 @@
 import os
 import yaml
 import math
+import time
 import torch
 import shutil
 import random
+import matplotlib
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
 
 from datetime import datetime
 
 
 plt.rcParams["font.family"] = "Times New Roman"
-FIG_DPI=100
+FIG_DPI=50
 
 def prefix(id, name = '', buffer = 3):
     '''
@@ -65,6 +66,7 @@ def init_log(args):
     output_dir = f"logs/{args.training_tag}/{start_time.strftime('%Y-%m-%d_%H-%M-%S')}/"
     os.makedirs(output_dir+"code/")
     os.makedirs(output_dir+"results/")
+    os.makedirs(output_dir+"results/ribbons/")
     print("Output dir-->", output_dir)
     
     # backup
@@ -201,3 +203,85 @@ def plot_error(error_train, error_valid, output_path):
     plt.legend(loc="upper right", fontsize=12)
     plt.savefig(output_path+'results/error_function.jpg')
     plt.close('all')
+    
+    
+def plot_ribbon(data, title, output_path, repeat=16):
+    ''' Plots color ribbon with legend
+    
+    data        : np.array [1xN]
+                    Data to plot
+
+    title       : str
+                    Title and save name of the figure, e.g. OP name
+
+    output_path : str
+                    path to save.
+
+    repeat      : int
+                    Vertical width of the ribbon 
+    '''
+    save_path = os.path.join(output_path, title+'.jpg')
+
+    # Labels
+    phases = ['Preperation', 'Puncture', 'GuideWire', 'CathPlacement', 
+        'CathPositioning', 'CathAdjustment', 'CathControl', 'Closing', 'Transition']
+
+    # Check data type
+    assert type(data) == type(np.zeros([1, 1])), "Input data should be a numpy array"
+
+
+    # Adapt shape
+    data = np.expand_dims(data, 0)
+    
+    # Repeat for thickness
+    data = np.repeat(data, repeats = repeat, axis = 0)
+    formatter = matplotlib.ticker.FuncFormatter(lambda s, 
+        x: time.strftime('%M:%S', time.gmtime(s // 60)))
+    xtick_pos = np.linspace(0, data.shape[1], data.shape[1] // 350)
+
+    # Cmap
+    def_cmap = plt.cm.get_cmap('tab10')
+    color_list = def_cmap(np.linspace(0, 1, 9))
+    disc_cmap = matplotlib.colors.LinearSegmentedColormap.from_list('DMap', color_list, 9)
+
+    # Plot
+    plt.figure(dpi = FIG_DPI)
+    plt.matshow(data, cmap=disc_cmap, vmin = 0, vmax = 8)
+    plt.grid(False)
+    plt.yticks([])
+    plt.clim(-0.5, 8.5)
+    cbar = plt.colorbar(ticks = range(len(phases)))
+    cbar.ax.set_yticks(np.arange(len(phases)), labels = phases)
+    plt.xticks(xtick_pos, fontsize=18)
+    plt.gca().xaxis.tick_bottom()
+    plt.gca().xaxis.set_major_formatter(formatter)
+    plt.xlabel('Time (HH:MM)')
+    plt.title(title, fontsize=20, pad = 10)
+    plt.savefig(save_path, bbox_inches='tight')
+    plt.close('all')
+    
+    
+def phase_weights(dataset, output_path='./', save_plot=False):
+    phase_count = np.zeros(8, dtype=int)
+    for d in dataset:
+        phase_count += d.dataset.phase_count()
+    
+    phase_weights = np.append(np.sum(phase_count) / phase_count, 0)
+    
+    # plot
+    if save_plot:       
+        def_cmap = plt.cm.get_cmap('tab10')
+        color_list = def_cmap(np.linspace(0, 1, 9))
+        
+        save_path = os.path.join(output_path, 'phase_count.jpg')
+        
+        plt.figure(dpi = FIG_DPI)
+        plt.bar(range(8), phase_count / np.sum(phase_count), color=color_list)
+        plt.xticks(fontsize=14)
+        plt.yticks(fontsize=14)
+        plt.xlabel('Surgical Phases', fontsize=18)
+        plt.ylabel('Percentage(%)', fontsize=18)
+        plt.savefig(save_path, bbox_inches='tight')
+        plt.close('all')
+    
+    return torch.from_numpy(phase_weights).float()

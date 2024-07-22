@@ -18,7 +18,6 @@ if __name__ == "__main__":
     # convert names to paths
     files_source = sorted([os.path.join(path_source, name+".csv") for name in names_new])
     files_target = sorted([os.path.join(path_target, name+".pkl") for name in names_new])
-    print(files_target)
     
     # get model
     device = "cuda" if torch.cuda.is_available() else "cpu"

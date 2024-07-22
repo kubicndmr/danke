@@ -67,8 +67,8 @@ if __name__ == '__main__':
     trainset, validset, testset = data.get_dataset('/DATA/kubi/PoCaP/',
                                                    log_txt,
                                                    args.batch_size,
-                                                   None)
-                                                   #'/DATA/kubi/SynPoCaP/')
+                                                   #None)
+                                                   '/DATA/kubi/SynPoCaP/')
     num_classes = 9
     
     ## Model
@@ -86,11 +86,12 @@ if __name__ == '__main__':
                     log_txt)
     
     ## Loss function
-    criteria = torch.nn.CrossEntropyLoss(reduction='mean', ignore_index=8)
+    phase_weights = utils.phase_weights(trainset).to(device)
+    criteria = torch.nn.CrossEntropyLoss(weight=phase_weights, reduction='mean', ignore_index=8)
     
     ## Optimizer 
     optimizer = torch.optim.Adam(
-        surgical_model.parameters(), 
+        surgical_model.parameters(),
         lr = args.learning_rate, 
         weight_decay = args.weight_decay
     )
@@ -179,7 +180,7 @@ if __name__ == '__main__':
                 metrics_valid.batch(label_, predict_)
         
             # Log OP
-            metrics_valid.op_end(data_loader.dataset.op_name)
+            metrics_valid.op_end(data_loader.dataset.op_name, plot_ribbon=True)
             
         # Validation Log
         error_valid[epoch] /= validset_size
