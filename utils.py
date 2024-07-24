@@ -269,18 +269,29 @@ def phase_weights(dataset, output_path='./', save_plot=False):
     phase_weights = np.append(np.sum(phase_count) / phase_count, 0)
     
     # plot
-    if save_plot:       
+    if save_plot:
+        percentage_count = np.zeros((len(dataset), 8))
+        for i,d in enumerate(dataset):
+            count = d.dataset.phase_count()
+            percentage_count[i,:] = count / np.sum(count)
+            
         def_cmap = plt.cm.get_cmap('tab10')
         color_list = def_cmap(np.linspace(0, 1, 9))
         
-        save_path = os.path.join(output_path, 'phase_count.jpg')
+        save_path = os.path.join(output_path, 'class_distribution.jpg')
         
         plt.figure(dpi = FIG_DPI)
-        plt.bar(range(8), phase_count / np.sum(phase_count), color=color_list)
-        plt.xticks(fontsize=14)
+        boxplots = plt.boxplot(percentage_count, 
+                               patch_artist=True, 
+                               medianprops=dict(color='black')
+        )
+        for patch, color in zip(boxplots['boxes'], color_list):
+            patch.set_facecolor(color)
+    
+        plt.xticks(ticks=range(1, 9), labels=range(8), fontsize=14)  
         plt.yticks(fontsize=14)
         plt.xlabel('Surgical Phases', fontsize=18)
-        plt.ylabel('Percentage(%)', fontsize=18)
+        plt.ylabel('Percentage (%)', fontsize=18)
         plt.savefig(save_path, bbox_inches='tight')
         plt.close('all')
     

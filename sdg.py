@@ -19,7 +19,7 @@ PRINT_MODE = False
 
 
 ############################## Functions ##############################    
-def prefix(id, name='', buffer=3):
+def prefix(id, name='', buffer=5):
     return name + str(id).zfill(buffer)
 
 
@@ -186,7 +186,36 @@ def listdir(path, ending=None):
                        if f.endswith(ending)])
         
 
-def drop_and_add(df, p_drop=0.2, p_add=0.2):
+def get_stats(data):
+    percentage_count = np.zeros((len(data), 8))
+    
+    for i, d in enumerate(data):
+        array_count = np.zeros(8, dtype=int)
+        df = pd.read_csv(d)
+        phases = df['Phase_Label'].value_counts().drop(8, errors='ignore')
+        array_count[phases.index] = phases.values
+        percentage_count[i,:] = array_count / np.sum(array_count)
+        
+    lower_quantile = np.quantile(percentage_count, 0.25, axis=0)
+    upper_quantile = np.quantile(percentage_count, 0.75, axis=0)
+    
+    return [lower_quantile, upper_quantile]
+
+
+def generate_d_a(q_low, q_high, p, eta=0):
+    if p <= q_low + eta:
+        d = np.random.uniform(0.1, 0.2)
+        a = np.random.uniform(0.2, 0.3)
+    elif p >= q_high - eta:
+        d = np.random.uniform(0.2, 0.3)
+        a = np.random.uniform(0.1, 0.2)
+    else:
+        d = np.random.uniform(0.1, 0.2)
+        a = np.random.uniform(0.12, 0.22)
+    return d, a
+
+
+def drop_and_add(df, qtile_low, qtile_high):
     '''
     This functions drops randomly selected rows from given dataframe,
     and adds empty rows in 'Text' column with '"Ausfüllen"' tag on randomly 
@@ -194,45 +223,81 @@ def drop_and_add(df, p_drop=0.2, p_add=0.2):
     
     Parameters:
     df              : DataFrame
-                        DataFrame with surgery releated sentences
-    p_drop          : Float
-                        Percentage of the total length of the DataFrame
-                        to drop
-
-    p_add           : Float
-                        Percentage of the total length of the DataFrame
-                        to add as empty rows
+                        DataFrame with transcriptions, time and phase labels
+    
+    qtile_low       : np.array
+                        0.25 percent quantile of phases computed from the
+                        dataset
+     
+    qtile_high      : np.array
+                        0.75 percent quantile of phases computed from the
+                        dataset   
     Returns:
-    pd.DataFrame    : DataFrame with rows dropped and empty rows added.
-    pd.DataFrame    : DataFrame with only empty rows.
+    df              : pd.DataFrame
+                        DataFrame with rows dropped and empty rows added.
+    df_to_fill      : pd.DataFrame
+                        DataFrame with only empty rows.
     '''
     fill_tag = '*Ausfüllen*'
+    
     # Remove unrelated parts
     df = df.drop(columns=['File_Name', 'End_Time'], errors='ignore')
     df = df[df['Text'] != '<nicht verstanden>']
-    df = df[(df['Phase_Bezeichnung'] != 8) & (df['Phase_Bezeichnung'] != '8')]
+    df = df[~df['Phase_Bezeichnung'].isin([8, '8'])]
 
-    # Drop rows randomly
-    num_to_drop = int(len(df) * p_drop)
-    df = df.drop(df.sample(n=num_to_drop).index).reset_index(drop=True)
+    # Get phase distribution
+    count = np.zeros(8, dtype=int)
+    phases = df['Phase_Bezeichnung'].value_counts().drop(8, errors='ignore')
+    count[phases.index] = phases.values
+    percentage = count / np.sum(count)
 
-    # Add empty rows randomly
-    num_to_add = int(len(df) * p_add)
-    for _ in range(num_to_add):
-        idx = np.random.randint(1,len(df))
-        empty_row = pd.DataFrame({
-            'Start_Zeit': [np.nan],
-            'Text': [fill_tag],
-            'Phase_Bezeichnung': [np.nan]
-        })
-        df = pd.concat([df.iloc[:idx], empty_row, df.iloc[idx:]]).reset_index(drop=True)
+    # Find number of lines to drop and add
+    to_add = np.zeros(len(count), dtype=int)
+    to_drop = np.zeros(len(count), dtype=int)
+    for i, (p, c, q_l, q_u) in enumerate(zip(percentage, count, qtile_low, qtile_high)):
+        if c == 0:
+            pass
+        if c > 0 and c < 3:
+            to_drop[i] = 0
+            to_add[i] = 1
+        else:   
+            d, a = generate_d_a(q_l, q_u, p)
+            to_drop[i] = np.ceil(c * d)
+            to_add[i] = np.ceil(c * a)
 
+    # Drop lines
+    for phase in range(len(to_drop)):
+        if count[phase] - to_drop[phase] > 1:
+            phase_indices = df[df['Phase_Bezeichnung'] == phase].index
+            if len(phase_indices) >= to_drop[phase]:
+                drop_indices = np.random.choice(phase_indices, to_drop[phase], replace=False)
+                df = df.drop(drop_indices)
+    
+    # Add lines
+    phase_dfs = []
+    for phase in range(len(to_add)):
+        phase_df = df[df['Phase_Bezeichnung'] == phase]
+        for _ in range(to_add[phase]):
+            empty_row = pd.DataFrame({
+                'Start_Zeit': [np.nan],
+                'Text': [fill_tag],
+                'Phase_Bezeichnung': [np.nan]
+            })
+            
+            if len(phase_df) == 1:
+                phase_df = pd.concat([phase_df, empty_row]).reset_index(drop=True)
+            else:
+                idx = np.random.randint(1,len(phase_df))
+                phase_df = pd.concat([phase_df.iloc[:idx], empty_row, phase_df.iloc[idx:]]).reset_index(drop=True)
+                
+        phase_dfs.append(phase_df)
+        
     # Adjust 'Start_Zeit' and 'Phase_Bezeichnung' columns
+    df = pd.concat(phase_dfs).reset_index(drop=True)
     df['Phase_Bezeichnung'] = df['Phase_Bezeichnung'].apply(pd.to_numeric).ffill().astype(int)
     df['Start_Zeit'] = df['Start_Zeit'].apply(pd.to_numeric).ffill()
     df['Start_Zeit'] = df['Start_Zeit'].apply(lambda x: x + np.random.uniform())
-    df['Start_Zeit'] = df['Start_Zeit'].round(2)
-    
+    df['Start_Zeit'] = df['Start_Zeit'].round(2) 
     df_to_fill = df.copy()
     df_to_fill = df_to_fill[df_to_fill['Text'] == fill_tag]
     df_to_fill['Grund'] = fill_tag
@@ -259,7 +324,7 @@ def check_format(block, columns, generation_tag='*Ausfüllen*'):
     return columns_flag * rows_flag
         
 
-def gen_data(language_model, tokenizer, sample_data):
+def gen_data(language_model, tokenizer, sample_data, qtile_low, qtile_high):
     '''
     Generates synthetic data
                         
@@ -296,9 +361,7 @@ Phase_Bezeichnung;Phase_Name;Phase_Beschreibung
     df_org = pd.read_csv(sample_data, index_col=0)
     df_org = df_org.rename(columns={'Start_Time': 'Start_Zeit', 'Phase_Label': 'Phase_Bezeichnung'})
     
-    p_drop = np.random.uniform(0.1, 0.2)
-    p_add = np.random.uniform(0.2, 0.3)
-    df_daa, df_to_fill = drop_and_add(df_org, p_drop=p_drop, p_add=p_add)
+    df_daa, df_to_fill = drop_and_add(df_org, qtile_low, qtile_high)
     
     # Prepare prompt iteratively
     dfs_to_concat = []
@@ -563,7 +626,7 @@ if __name__ == "__main__":
     huggingface_hub.login(os.getenv('HF_TOKEN'), add_to_git_credential=False)
     
     # Model
-    tokenizer = AutoTokenizer.from_pretrained(model_id, cache_dir=os.getenv('HF_CACHE_DIR'))
+    gemma2_tokenizer = AutoTokenizer.from_pretrained(model_id, cache_dir=os.getenv('HF_CACHE_DIR'))
     gemma2 = AutoModelForCausalLM.from_pretrained(
         model_id,
         device_map='auto',
@@ -576,9 +639,17 @@ if __name__ == "__main__":
     data_path = 'Transcripts/'
     seedset = ['OP_009.csv', 'OP_012.csv', 'OP_033.csv', 'OP_034.csv', 
                 'OP_026.csv', 'OP_029.csv', 'OP_025.csv', 'OP_036.csv', 
-                'OP_017.csv', 'OP_013.csv', 'OP_030.csv', 
-                'OP_005.csv', 'OP_040.csv', 'OP_031.csv']
+                'OP_017.csv', 'OP_013.csv', 'OP_030.csv', 'OP_003.csv', 
+                'OP_005.csv', 'OP_040.csv', 'OP_031.csv', 'OP_024.csv',
+                'OP_002.csv', 'OP_006.csv', 'OP_016.csv', 'OP_014.csv']
     trainset = [os.path.join(data_path, s) for s in seedset]
+
+    validset = ['OP_019.csv', 'OP_032.csv', 'OP_039.csv', 'OP_010.csv', 
+                'OP_022.csv', 'OP_008.csv', 'OP_001.csv', 'OP_038.csv']
+    validset = sorted([os.path.join(data_path, v) for v in validset])
+    
+    # Compute quantiles    
+    qtile_low, qtile_high = get_stats(trainset)
     
     generated_path = 'SynPoCaP'
     for g in os.listdir(generated_path):
@@ -597,7 +668,13 @@ if __name__ == "__main__":
         # generate data, save and log
         try:
             generation_start = time.time()
-            df, chat_container = gen_data(language_model=gemma2, tokenizer=tokenizer, sample_data=sample_data)
+            df, chat_container = gen_data(
+                language_model=gemma2, 
+                tokenizer=gemma2_tokenizer, 
+                sample_data=sample_data, 
+                qtile_low=qtile_low, 
+                qtile_high=qtile_high
+            )
 
             df.to_csv(args.target_path + prefix(prefix_idx+1, 'SynOP_') + ".csv")
             trainset.append(args.target_path + prefix(prefix_idx+1, 'SynOP_') + ".csv")
