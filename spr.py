@@ -134,7 +134,7 @@ if __name__ == '__main__':
 
                 # Model
                 optimizer.zero_grad()
-                predict_ = surgical_model(embed_)
+                predict_ = surgical_model(embed_, time_)
                 
                 # Loss
                 error_batch = criteria(predict_, label_)
@@ -170,7 +170,7 @@ if __name__ == '__main__':
                 
                 # Model
                 with torch.no_grad():
-                    predict_ = surgical_model(embed_)
+                    predict_ = surgical_model(embed_, time_)
             
                 # Loss
                 error_batch = criteria(predict_, label_)
@@ -202,7 +202,7 @@ if __name__ == '__main__':
             patience_escb += 1
         if patience_escb > patience_limit:
             early_stopper = True
-            utils.print_log('Early Stopper!!!', log_txt, display=True)
+            utils.print_log('Early Stopper!!!\n', log_txt, display=True)
             
         epoch += 1
 

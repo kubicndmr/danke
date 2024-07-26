@@ -3,6 +3,7 @@ import math
 import torch
 import torch.nn.functional as F
 
+from PIL import Image
 from torch import nn
 from collections import OrderedDict
 
@@ -105,11 +106,55 @@ class SLPEncoder(nn.Module):
         x = self.norm2(x)
 
         return x
+"""
+class PositionalEncoding(nn.Module):
 
+    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
+        super().__init__()
+        self.dropout = nn.Dropout(p=dropout)
 
+        position = torch.arange(max_len).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
+        pe = torch.zeros(max_len, 1, d_model)
+        pe[:, 0, 0::2] = torch.sin(position * div_term)
+        pe[:, 0, 1::2] = torch.cos(position * div_term)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        '''
+        Arguments:
+            x: Tensor, shape ``[seq_len, batch_size, embedding_dim]``
+        '''
+        x = x + self.pe[:x.size(0)]
+        return self.dropout(x)
+""" 
+def save_tensor_as_image(tensor, file_path):
+    """
+    Save a PyTorch tensor as an image file.
+
+    Args:
+    - tensor (torch.Tensor): The tensor to save as an image.
+    - file_path (str): The path where the image will be saved.
+    """
+    # Normalize the tensor to the range [0, 255]
+    tensor_min = tensor.min()
+    tensor_max = tensor.max()
+    tensor = (tensor - tensor_min) / (tensor_max - tensor_min)  # Scale to [0, 1]
+    tensor = tensor * 255  # Scale to [0, 255]
+    tensor = tensor.byte()  # Convert to byte type
+
+    # Convert the tensor to a numpy array and then to a PIL image
+    np_array = tensor.cpu().numpy()
+    image = Image.fromarray(np_array)
+
+    # Save the image
+    image.save(file_path)
+    
 class SLPNet(nn.Module):
     def __init__(self, model_dim, num_head, num_encoder, num_classes, dropout_prob):
         super().__init__()
+        self.model_dim = model_dim
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
         self.embed_in = nn.Sequential(
             nn.Conv1d(
@@ -133,9 +178,22 @@ class SLPNet(nn.Module):
             in_features=model_dim,
             out_features=num_classes
         )
-                
-    def forward(self, x):
-        x = self.embed_in(x) # (B, 3072, L) -> (B, model_dim, L)
+    
+    def positional_encoding(self, idx):
+        pe = torch.zeros((self.model_dim, idx.shape[0])).to(self.device)
+        position = torch.arange(0, self.model_dim, dtype=torch.float).unsqueeze(1).to(self.device)
+        div_term = torch.pow(10000, (position // 2 * 2) / self.model_dim).to(self.device)
+
+        pe[0::2, :] = torch.sin(idx / div_term[0::2])
+        pe[1::2, :] = torch.cos(idx / div_term[1::2])
+
+        return pe.T
+      
+    def forward(self, x, t):
+        t = self.positional_encoding(t) # (B, model_dim)
+        t = t.unsqueeze(-1) # (B, model_dim, L)
+        x = self.embed_in(x) # (B, 1024, L) -> (B, model_dim, L)
+        x = x + t # (B, model_dim, L)
         x = self.encoder(torch.transpose(x, 1, 2)) # -> (B, L, model_dim)
         x = self.classfier(x) # -> (B, L, num_classes)
         return x.squeeze() # -> (B, num_classes)

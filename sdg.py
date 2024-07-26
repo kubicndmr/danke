@@ -292,12 +292,54 @@ def drop_and_add(df, qtile_low, qtile_high):
                 
         phase_dfs.append(phase_df)
         
-    # Adjust 'Start_Zeit' and 'Phase_Bezeichnung' columns
+    # Concat
     df = pd.concat(phase_dfs).reset_index(drop=True)
+    
+    # Fill the phase label column
     df['Phase_Bezeichnung'] = df['Phase_Bezeichnung'].apply(pd.to_numeric).ffill().astype(int)
+    
+    # Update the time column with randomly generated values
     df['Start_Zeit'] = df['Start_Zeit'].apply(pd.to_numeric).ffill()
-    df['Start_Zeit'] = df['Start_Zeit'].apply(lambda x: x + np.random.uniform())
-    df['Start_Zeit'] = df['Start_Zeit'].round(2) 
+    
+    relaxation = 0.01
+    last_phase_end = 0
+    
+    for phase in df['Phase_Bezeichnung'].unique():
+        
+        phase_df = df[df['Phase_Bezeichnung'] == phase].copy()
+        
+        start_time = phase_df['Start_Zeit'].iloc[0]
+        end_time = phase_df['Start_Zeit'].iloc[-1]
+        
+        if last_phase_end == 0:
+            start_time = np.random.uniform(start_time*(1-relaxation), start_time*(1+relaxation), 1)[0]
+        else:
+            if start_time > last_phase_end:
+                start_time = np.random.uniform(last_phase_end, start_time*(1+relaxation), 1)[0]
+            else:
+                start_time = np.random.uniform(last_phase_end, last_phase_end*(1+relaxation), 1)[0]
+        
+        
+        end_time = np.random.uniform(end_time*(1-relaxation), end_time*(1+relaxation), 1)[0]
+        last_phase_end = end_time
+        
+        if len(phase_df) > 2:
+            random_times = sorted(np.random.uniform(start_time + 1, end_time, len(phase_df) - 2))
+            random_times = [start_time] + list(random_times) + [end_time]
+            
+            for i, new_time in zip(phase_df.index, random_times):
+                df.at[i, 'Start_Zeit'] = new_time
+        
+        else:
+            if len(phase_df) == 2:
+                df.at[phase_df.index[0], 'Start_Zeit'] = start_time
+                df.at[phase_df.index[1], 'Start_Zeit'] = end_time
+            elif len(phase_df) == 1:
+                df.at[phase_df.index[0], 'Start_Zeit'] = start_time
+    
+    df['Start_Zeit'] = df['Start_Zeit'].astype(float).round(3)
+      
+    # Copy also empty datatframe
     df_to_fill = df.copy()
     df_to_fill = df_to_fill[df_to_fill['Text'] == fill_tag]
     df_to_fill['Grund'] = fill_tag
@@ -382,7 +424,7 @@ Phase_Bezeichnung;Phase_Name;Phase_Beschreibung
                 print(f'\tStep 1: {int(i+1)}/{num_sub_dfs} max new tokens: {max_new_tokens}')
                 
                 prompt = """\n* Anweisung: Du erhältst einen Datensatz mit einer Reihe von Sätzen im Abschnitt <Daten>. Die Daten enthalten einen Index, die Startzeit der Rede, den gesprochenen Satz und eine Bezeichnung für die Operationsphase. Allerdings fehlen einige Daten in der Textspalte. 
-* Aufgabe: Deine Aufgabe ist es, die Zeilen in der Spalte 'Text', die mit '"Ausfüllen"' markiert sind, in mehreren Schritten zu ergänzen. In diesem Schritt wirst du speziell die ausgewählten Teile der Daten ergänzen, die im Abschnitt <Antwort 1> aufgeführt sind. Verwende die Spalte 'Grund' in der Vorlage <Antwort 1>, um mit 10 Wörtern zu erklären, warum du dich für diese Sätze entschieden hast. Stell sicher, dass die generierten Sätze mit der vorgegebenen Phase übereinstimmen und den Nachbarsätzen anknüpfen, wobei der Kontext erhalten bleibt.
+* Aufgabe: Deine Aufgabe ist es, die Zeilen in der Spalte 'Text', die mit '"Ausfüllen"' markiert sind, in mehreren Schritten zu ergänzen. In diesem Schritt wirst du speziell die ausgewählten Teile der Daten ergänzen, die im Abschnitt <Antwort 1> aufgeführt sind. Stell sicher, dass die generierten Sätze mit der vorgegebenen Phasen im Abschinitt <Operation> übereinstimmen und auch den Nachbarsätzen anknüpfen, wobei der Kontext erhalten bleibt. Verwende die Spalte 'Grund' in der Vorlage <Antwort 1>, um mit 10 Wörtern zu erklären, warum du dich für diese Sätze entschieden hast.
 * Still: Du sollst die Daten in einem konsistenten Stil mit dem unten angegebenen Daten erstellen. Verwende die gesamte Daten im <Daten> Abschnitt um die Kontext der Gescprähe zu erfahren. Antworte unbedingt im CSV-Format als in der Vorlage <Antwort 1>."""
                 prompt += f"\n<Daten>\n{df_to_print.to_csv(index=True, sep=';', index_label='Index')}</Daten>\n"
                 prompt += f"\n<Antwort 1>\n{sub_df.to_csv(index=True, sep=';', index_label='Index')}</Antwort 1>\n"
@@ -549,6 +591,7 @@ Phase_Bezeichnung;Phase_Name;Phase_Beschreibung
                 correct_format = check_format(block_answer, ['Index', 'Start_Zeit', 'Phase_Bezeichnung', 'Text'])
                 df_answer = block_to_df(block_answer)
                 df_answer = df_answer[['Start_Zeit', 'Text', 'Phase_Bezeichnung']]
+                df_answer['Phase_Bezeichnung'] = df_answer['Phase_Bezeichnung'].apply(pd.to_numeric)
                 if not correct_format:
                     print('\t\tColumns or rows do not match')
                     raise ValueError(f"Columns or rows do not match")
@@ -597,7 +640,7 @@ if __name__ == "__main__":
         description="Synthetic Data Generation for SPR")
     
     parser.add_argument('-t', '--target_path', type=str,
-                        default='SynPoCaP_Batch/',
+                        default='SynPoCaP/',
                         help='path to save generated data')
     
     parser.add_argument('-n', '--num_target', 
@@ -615,11 +658,11 @@ if __name__ == "__main__":
         os.mkdir(args.target_path)
 
     # Variables
-    model_id = 'google/gemma-2-27b-it'
-    prefix_idx = args.prefix_index
-    end_idx = prefix_idx + args.num_target - 1
-    error_patience = 3
     error_count = 0
+    error_patience = 5
+    prefix_idx = args.prefix_index
+    model_id = 'google/gemma-2-27b-it'
+    end_idx = prefix_idx + args.num_target - 1
     
     # Login huggingface environment
     load_dotenv()
@@ -639,9 +682,9 @@ if __name__ == "__main__":
     data_path = 'Transcripts/'
     seedset = ['OP_009.csv', 'OP_012.csv', 'OP_033.csv', 'OP_034.csv', 
                 'OP_026.csv', 'OP_029.csv', 'OP_025.csv', 'OP_036.csv', 
-                'OP_017.csv', 'OP_013.csv', 'OP_030.csv', 'OP_003.csv', 
-                'OP_005.csv', 'OP_040.csv', 'OP_031.csv', 'OP_024.csv',
-                'OP_002.csv', 'OP_006.csv', 'OP_016.csv', 'OP_014.csv']
+                'OP_013.csv', 'OP_030.csv', 'OP_003.csv',
+                'OP_005.csv', 'OP_040.csv', 'OP_031.csv',
+                'OP_002.csv', 'OP_016.csv', 'OP_014.csv'] #006 -> 500+, 17, 24 --> 250+
     trainset = [os.path.join(data_path, s) for s in seedset]
 
     validset = ['OP_019.csv', 'OP_032.csv', 'OP_039.csv', 'OP_010.csv', 
@@ -650,20 +693,17 @@ if __name__ == "__main__":
     
     # Compute quantiles    
     qtile_low, qtile_high = get_stats(trainset)
-    
-    generated_path = 'SynPoCaP'
-    for g in os.listdir(generated_path):
-        trainset.append(os.path.join(generated_path, g))
 
     # Generate Data
     while prefix_idx <= end_idx and error_count < error_patience:
-        print(args.target_path + prefix(prefix_idx+1, 'SynOP_') + ".csv")
+        # set save name
+        save_name = args.target_path + prefix(prefix_idx+1, 'SynOP_') + ".csv"
         
         # select sample data
         random.shuffle(trainset)
         sample_data = trainset[0]
-        #sample_data = trainset[trainset_idx]
-        print('\tSample Data:', sample_data)
+        
+        print(f"Target: {save_name}\tSource: {sample_data}")
         
         # generate data, save and log
         try:
@@ -676,10 +716,15 @@ if __name__ == "__main__":
                 qtile_high=qtile_high
             )
 
-            df.to_csv(args.target_path + prefix(prefix_idx+1, 'SynOP_') + ".csv")
-            trainset.append(args.target_path + prefix(prefix_idx+1, 'SynOP_') + ".csv")
+            df.to_csv(save_name)
             
-            with open(args.target_path + prefix(prefix_idx+1, 'SynOP_') + ".txt", "w") as f:
+            # update trainset
+            for g in os.listdir(args.target_path):
+                if g.endswith('.csv'):
+                    trainset.append(os.path.join(args.target_path, g))
+            
+            # save log
+            with open(save_name[:-4] + ".txt", "w") as f:
                 f.write('Refence Data:'+sample_data+'\n')
                 for c in chat_container:
                     f.write('\n'+'*'*50+' <'+c['role']+'> '+'*'*50+'\n')
@@ -687,10 +732,10 @@ if __name__ == "__main__":
                 f.write(f'\nElapsed time:\t{time.time() - generation_start}(s)')
                 error_count = 0
             
+            # increment
             prefix_idx += 1
 
         # uppps
         except:
-            print(args.target_path + prefix(prefix_idx+1, 'SynOP_') + ".csv could not generated")
-            print('Trying again!')
+            print(f"{save_name} could not generated\nTrying again!")
             error_count += 1
