@@ -15,7 +15,7 @@ from transformers import AutoTokenizer
 from transformers import AutoModelForCausalLM
 
 
-PRINT_MODE = False
+PRINT_MODE = True
 
 
 ############################## Functions ##############################    
@@ -205,13 +205,13 @@ def get_stats(data):
 def generate_d_a(q_low, q_high, p, eta=0):
     if p <= q_low + eta:
         d = np.random.uniform(0.1, 0.2)
-        a = np.random.uniform(0.2, 0.3)
+        a = np.random.uniform(0.2, 0.3) #106.25
     elif p >= q_high - eta:
         d = np.random.uniform(0.2, 0.3)
-        a = np.random.uniform(0.1, 0.2)
+        a = np.random.uniform(0.2, 0.3) #93.75
     else:
         d = np.random.uniform(0.1, 0.2)
-        a = np.random.uniform(0.12, 0.22)
+        a = np.random.uniform(0.12, 0.22) #99,875
     return d, a
 
 
@@ -386,7 +386,7 @@ def gen_data(language_model, tokenizer, sample_data, qtile_low, qtile_high):
     max_token_generation = 1000
     
     # Prepare Role Prompt
-    role = """* Rolle: Du bist ein hilfsbereites künstlicher Assistent, der die Sprache der Chirurgen in der radiologischen Abteilung nachahmt, die Operationen zur Platzierung von Portkathetern durchführen. Die Phasen der Operation wurden im Abschnitt <Operation> angegeben. Das Ziel ist es, Gespräche eines Chirurgen mit dem medizinischen Assistenten und dem Patienten während einer Port-Katheter-Platzierung zu generieren. Die neu generierten Daten werden für das Training eines textbasierten Deep-Learning-Modells verwendet, das entwickelt wurde, um die chirurgischen Phasen der Port-Katheter-Placement-Operation zu erkennen. Alle Gespräche in den Daten müssen ausschließlich auf Deutsch geführt werden. Um eine neue Daten zu erstellen, befolge die Anweisungen und gib deine Antwort in den markierten Abschnitten ein."""
+    role = """* Rolle: Du bist ein hilfsbereites künstlicher Assistent, der die Sprache der Chirurgen in der radiologischen Abteilung nachahmt, die Operationen zur Platzierung von Portkathetern durchführen. Das Ziel ist es, Gespräche eines Chirurgen mit dem medizinischen Assistenten und dem Patienten während einer Port-Katheter-Platzierung zu generieren. Die neu generierten Daten werden für das Training eines textbasierten Deep-Learning-Modells verwendet, das entwickelt wurde, um die chirurgischen Phasen der Port-Katheter-Placement-Operation zu erkennen. Die Phasen der Operation wurden im Abschnitt <Operation> angegeben. Alle Gespräche in den Daten müssen ausschließlich auf Deutsch geführt werden."""
     role += """<Operation>
 Phase_Bezeichnung;Phase_Name;Phase_Beschreibung
 0;Vorbereitung;Der Patient wird auf die Operation vorbereitet, was die Desinfektion der Haut, die Auswahl der Punktionsstelle und die Bereitstellung der erforderlichen medizinischen Instrumente umfasst.
@@ -424,8 +424,8 @@ Phase_Bezeichnung;Phase_Name;Phase_Beschreibung
                 print(f'\tStep 1: {int(i+1)}/{num_sub_dfs} max new tokens: {max_new_tokens}')
                 
                 prompt = """\n* Anweisung: Du erhältst einen Datensatz mit einer Reihe von Sätzen im Abschnitt <Daten>. Die Daten enthalten einen Index, die Startzeit der Rede, den gesprochenen Satz und eine Bezeichnung für die Operationsphase. Allerdings fehlen einige Daten in der Textspalte. 
-* Aufgabe: Deine Aufgabe ist es, die Zeilen in der Spalte 'Text', die mit '"Ausfüllen"' markiert sind, in mehreren Schritten zu ergänzen. In diesem Schritt wirst du speziell die ausgewählten Teile der Daten ergänzen, die im Abschnitt <Antwort 1> aufgeführt sind. Stell sicher, dass die generierten Sätze mit der vorgegebenen Phasen im Abschinitt <Operation> übereinstimmen und auch den Nachbarsätzen anknüpfen, wobei der Kontext erhalten bleibt. Verwende die Spalte 'Grund' in der Vorlage <Antwort 1>, um mit 10 Wörtern zu erklären, warum du dich für diese Sätze entschieden hast.
-* Still: Du sollst die Daten in einem konsistenten Stil mit dem unten angegebenen Daten erstellen. Verwende die gesamte Daten im <Daten> Abschnitt um die Kontext der Gescprähe zu erfahren. Antworte unbedingt im CSV-Format als in der Vorlage <Antwort 1>."""
+* Aufgabe: Deine Aufgabe ist es, die Zeilen in der Spalte 'Text', die mit '"Ausfüllen"' markiert sind, in mehreren Schritten zu ergänzen. In diesem Schritt wirst du speziell die ausgewählten Teile der Daten ergänzen, die im Abschnitt <Antwort 1> aufgeführt sind. Generiere Sätze der Chirurgen, die mit den vorgegebenen Phasen im Abschnitt „Operation“ übereinstimmen. Stell dich sicher, dass die Nachbarsätzen anknüpfen, wobei der Kontext erhalten bleibt. Verwende die Spalte 'Grund' in der Vorlage <Antwort 1>, um mit 10 Wörtern zu erklären, warum du dich für diese Sätze entschieden hast.
+* Still: Du sollst die Daten in einem konsistenten Stil mit dem unten angegebenen Daten erstellen. Verwende die gesamten Daten in den Abschnitten <Daten> und <Operation>, um den Kontext der Gespräche zu verstehen. Antworte unbedingt im CSV-Format als in der Vorlage <Antwort 1>."""
                 prompt += f"\n<Daten>\n{df_to_print.to_csv(index=True, sep=';', index_label='Index')}</Daten>\n"
                 prompt += f"\n<Antwort 1>\n{sub_df.to_csv(index=True, sep=';', index_label='Index')}</Antwort 1>\n"
     
@@ -680,19 +680,19 @@ if __name__ == "__main__":
 
     # Read reference data
     data_path = 'Transcripts/'
-    seedset = ['OP_009.csv', 'OP_012.csv', 'OP_033.csv', 'OP_034.csv', 
-                'OP_026.csv', 'OP_029.csv', 'OP_025.csv', 'OP_036.csv', 
-                'OP_013.csv', 'OP_030.csv', 'OP_003.csv',
-                'OP_005.csv', 'OP_040.csv', 'OP_031.csv',
-                'OP_002.csv', 'OP_016.csv', 'OP_014.csv'] #006 -> 500+, 17, 24 --> 250+
-    trainset = [os.path.join(data_path, s) for s in seedset]
+    seedset = ['OP_005.csv', 'OP_023.csv', 'OP_027.csv', 'OP_040.csv', 
+               'OP_035.csv', 'OP_002.csv', 'OP_038.csv', 'OP_013.csv',
+               'OP_011.csv', 'OP_022.csv', 'OP_007.csv', 'OP_019.csv', 
+               'OP_039.csv', 'OP_026.csv', 'OP_016.csv', 'OP_009.csv', 'OP_032.csv'] #006 -> 500+, 17, 24 --> 250+
+    
+    dataset = [os.path.join(data_path, s) for s in seedset]
 
-    validset = ['OP_019.csv', 'OP_032.csv', 'OP_039.csv', 'OP_010.csv', 
-                'OP_022.csv', 'OP_008.csv', 'OP_001.csv', 'OP_038.csv']
+    validset = ['OP_012.csv', 'OP_001.csv', 'OP_008.csv', 'OP_031.csv', 
+                'OP_029.csv', 'OP_004.csv', 'OP_025.csv', 'OP_003.csv']
     validset = sorted([os.path.join(data_path, v) for v in validset])
     
     # Compute quantiles    
-    qtile_low, qtile_high = get_stats(trainset)
+    qtile_low, qtile_high = get_stats(dataset + validset)
 
     # Generate Data
     while prefix_idx <= end_idx and error_count < error_patience:
@@ -700,8 +700,8 @@ if __name__ == "__main__":
         save_name = args.target_path + prefix(prefix_idx+1, 'SynOP_') + ".csv"
         
         # select sample data
-        random.shuffle(trainset)
-        sample_data = trainset[0]
+        random.shuffle(dataset)
+        sample_data = dataset[0]
         
         print(f"Target: {save_name}\tSource: {sample_data}")
         
@@ -721,7 +721,7 @@ if __name__ == "__main__":
             # update trainset
             for g in os.listdir(args.target_path):
                 if g.endswith('.csv'):
-                    trainset.append(os.path.join(args.target_path, g))
+                    dataset.append(os.path.join(args.target_path, g))
             
             # save log
             with open(save_name[:-4] + ".txt", "w") as f:

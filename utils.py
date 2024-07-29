@@ -4,12 +4,13 @@ import math
 import time
 import torch
 import shutil
-import random
 import matplotlib
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 
 from datetime import datetime
+from scipy.stats import entropy
 
 
 plt.rcParams["font.family"] = "Times New Roman"
@@ -154,26 +155,50 @@ def save_args(args, filename):
         yaml.dump(params, file, default_flow_style=False)
     
 
-def data_split(data_path, log_txt='log.txt', split=0.8, synthetic_data_path=None):
-    # read path
-    ops = listdir(data_path, '.pkl')
+def data_split(data_path, log_txt='log.txt', split=0.2, synthetic_data_path=None):
+    # read data path
+    dataset = listdir(data_path, '.pkl')
+        
+    # count phases    
+    phase_count = np.zeros((len(dataset), 8))
+    for i, d in enumerate(dataset):
+        df = pd.read_pickle(os.path.join(data_path, d))
+        array_count = np.zeros(8, dtype=int)
+        phases = df['Phase_Label'].value_counts().drop(8, errors='ignore')
+        array_count[phases.index] = phases.values
+        phase_count[i,:] = array_count
 
-    # shuffle
-    random.seed(1881)
-    random.shuffle(ops)
+    # create df
+    data = {
+        'op': dataset, 
+        'percentage': list(phase_count/np.sum(phase_count, axis=0))
+    }
+    df = pd.DataFrame(data)
     
-    # compute number of ops in testset
-    if len(ops)%2 == 0:
-        testset_size = math.ceil(len(ops)*(1-split))
+    # compute entropy
+    df['H'] = df['percentage'].apply(lambda x: entropy(x, base = 2))
+    
+    # sort according to entropy
+    df.sort_values(by='H', inplace=True, ascending=False, ignore_index=True)    
+
+    # compute testset size
+    if len(dataset)%2 == 0:
+        testset_size = math.ceil(len(dataset)*(split))
     else:
-        testset_size = math.ceil(len(ops-1)*(1-split))
+        testset_size = math.ceil(len(dataset-1)*(split))
     
-    # split
-    trainset = ops[:-2*testset_size]
-    validset = ops[-2*testset_size:-testset_size]
-    testset = ops[-testset_size:]
+    # split sets
+    df['split'] = 'tr'
+    df.loc[:8-1, 'split'] = 'te'
+    df.loc[testset_size:2*testset_size-1, 'split'] = 'va'
     
-    #synthetic
+    df.drop(columns='percentage', inplace=True)
+    
+    trainset = df.loc[df['split'] == 'tr', 'op'].tolist()
+    validset = df.loc[df['split'] == 'va', 'op'].tolist()
+    testset = df.loc[df['split'] == 'te', 'op'].tolist()
+            
+    # add synthetic data
     if synthetic_data_path != None:
         trainset = trainset + listdir(synthetic_data_path, '.pkl')
     
