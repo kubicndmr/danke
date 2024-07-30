@@ -15,8 +15,9 @@ from transformers import AutoTokenizer
 from transformers import AutoModelForCausalLM
 
 
-PRINT_MODE = True
-
+LOG_MODE = True
+DEBUG_MODE = False
+PRINT_MODE = False
 
 ############################## Functions ##############################    
 def prefix(id, name='', buffer=5):
@@ -47,11 +48,12 @@ def get_answer(language_model, tokenizer, messages, max_new_tokens,
     # Encode the prompt to input tensor
     inputs = tokenizer.encode(prompt, add_special_tokens=False, return_tensors="pt")
     
-    #for debugging
-    with open('prompt.txt', 'w') as f:
-        f.write(prompt)
-        f.write(f"\nPrompt has {len(inputs[0])} tokens")
-        f.write(subprocess.run(['nvidia-smi'], capture_output=True, text=True).stdout)
+    # Output
+    if DEBUG_MODE:
+        with open('prompt.txt', 'w') as f:
+            f.write(prompt)
+            f.write(f"\nPrompt has {len(inputs[0])} tokens")
+            f.write(subprocess.run(['nvidia-smi'], capture_output=True, text=True).stdout)
     
     # Generate the model's response
     outputs = language_model.generate(
@@ -66,10 +68,11 @@ def get_answer(language_model, tokenizer, messages, max_new_tokens,
     # Decode the model's output and update the chat history
     response = tokenizer.decode(outputs[0], skip_special_tokens=False)
     
-    #for debugging
-    with open('response.txt', 'w') as f:
-        f.write(response)
-        f.write(subprocess.run(['nvidia-smi'], capture_output=True, text=True).stdout)
+    # Output
+    if DEBUG_MODE:
+        with open('response.txt', 'w') as f:
+            f.write(response)
+            f.write(subprocess.run(['nvidia-smi'], capture_output=True, text=True).stdout)
     
     # Extract the model's answer by splitting at the delimiter
     answer = remove_generation_tokens(response)
@@ -132,11 +135,12 @@ def block_to_df(block):
     Converts a list of strings into a pandas DataFrame
 
     Args:
-        block       : list 
-                        A list of strings where the first item contains column names
+        block   : list 
+                    A list of strings where the first item contains column names
         
     Returns:
-        pandas.DataFrame: A DataFrame of the text
+        df      : pandas.DataFrame
+                    A DataFrame of the text
     """
     columns = block[0].split(';')
     
@@ -146,7 +150,6 @@ def block_to_df(block):
 
     df = pd.DataFrame(rows, columns=columns)
     
-    # Convert 'Index' to numeric and set it as the index
     df[columns[0]] = df[columns[0]].apply(pd.to_numeric)
     df.set_index(columns[0], inplace=True)
 
@@ -421,7 +424,8 @@ Phase_Bezeichnung;Phase_Name;Phase_Beschreibung
         n_try = 0
         while n_try < limit_try:
             try:
-                print(f'\tStep 1: {int(i+1)}/{num_sub_dfs} max new tokens: {max_new_tokens}')
+                if PRINT_MODE:
+                    print(f'\tStep 1: {int(i+1)}/{num_sub_dfs} max new tokens: {max_new_tokens}')
                 
                 prompt = """\n* Anweisung: Du erhältst einen Datensatz mit einer Reihe von Sätzen im Abschnitt <Daten>. Die Daten enthalten einen Index, die Startzeit der Rede, den gesprochenen Satz und eine Bezeichnung für die Operationsphase. Allerdings fehlen einige Daten in der Textspalte. 
 * Aufgabe: Deine Aufgabe ist es, die Zeilen in der Spalte 'Text', die mit '"Ausfüllen"' markiert sind, in mehreren Schritten zu ergänzen. In diesem Schritt wirst du speziell die ausgewählten Teile der Daten ergänzen, die im Abschnitt <Antwort 1> aufgeführt sind. Generiere Sätze der Chirurgen, die mit den vorgegebenen Phasen im Abschnitt „Operation“ übereinstimmen. Stell dich sicher, dass die Nachbarsätzen anknüpfen, wobei der Kontext erhalten bleibt. Verwende die Spalte 'Grund' in der Vorlage <Antwort 1>, um mit 10 Wörtern zu erklären, warum du dich für diese Sätze entschieden hast.
@@ -432,11 +436,6 @@ Phase_Bezeichnung;Phase_Name;Phase_Beschreibung
                 # Generate Answer 1
                 messages = [{"role": "user", "content": role + prompt}]
                 messages, answer = get_answer(language_model, tokenizer, messages, max_new_tokens=max_new_tokens) 
-                '''
-                with open(f'step_1_{i+1}.txt', 'r', encoding='utf-8') as file:
-                    answer = file.readlines()
-                answer = "\n".join(answer) + '\n'
-                '''
                 
                 # Extract tagged block
                 block_answer = get_tagged_block(answer, '<Antwort 1>', '</Antwort 1>')
@@ -447,26 +446,30 @@ Phase_Bezeichnung;Phase_Name;Phase_Beschreibung
                 # Check format
                 correct_format = check_format(block_answer, ['Index', 'Start_Zeit', 'Text', 'Phase_Bezeichnung', 'Grund'])
                 if not correct_format:
-                    print('\t\tColumns or rows do not match')
+                    if PRINT_MODE:
+                        print('\t\tColumns or rows do not match')
                     raise ValueError(f"Columns or rows do not match")
                 
                 # Concat
                 dfs_to_concat.append(block_to_df(block_answer))
                 
-                # Log for debugging
-                if PRINT_MODE:
+                # Output
+                if DEBUG_MODE:
                     with open(f'step_1_{i+1}.txt', 'w') as f:
                         for m in messages:
                             f.write('*'*50+' <'+m['role']+'> '+'*'*50+'\n')
                             f.write(m['content'])
-                            chat_container.append({"role": m['role'], "content": m['content']})
+                if LOG_MODE:
+                    for m in messages:
+                        chat_container.append({"role": m['role'], "content": m['content']})
                 
                 # Exit loop
                 n_try = limit_try
+                
             except:
-                # Increment
-                print(f'\t\tConnot genreate step_1_{i+1}.txt, will try again')
                 n_try += 1
+                if PRINT_MODE:
+                    print(f'\t\tConnot genreate step_1_{i+1}.txt, will try again')
 
     df_empty_rows = pd.concat(dfs_to_concat)
     df_empty_rows['Text'] = df_empty_rows['Text'].str.replace('"""', '')
@@ -496,7 +499,8 @@ Phase_Bezeichnung;Phase_Name;Phase_Beschreibung
         n_try = 0
         while n_try < limit_try:
             try:
-                print(f'\tStep 2: {int(i+1)}/{num_sub_dfs} max new tokens: {max_new_tokens}')
+                if PRINT_MODE:
+                    print(f'\tStep 2: {int(i+1)}/{num_sub_dfs} max new tokens: {max_new_tokens}')
                 
                 prompt = """\n* Anweisung: Du erhältst einen Datensatz mit einer Reihe von Sätzen im Abschnitt <Daten>. Die Daten enthalten einen Index, die Startzeit der Rede, den gesprochenen Satz und eine Bezeichnung für die Operationsphase. 
 * Aufgabe: Deine Aufgabe ist die einzeln gegebenen Sätze in der Spalte „Text“ in mehreren Schritten analizieren und bestimmen, ob die Sätze für die Erkennung der in der Spalte 'Phase_Bezeichnung' angegebenen chirurgischen Phasen wichtig sind. In diesem Schritt wirst du speziell mit der ausgewählten Teile der Daten arbeiten, die im Abschnitt <Antwort 2> aufgeführt sind. Markiere 'C' für Sätze, die für die Erkennung chirurgischer Phasen relevant sind, und 'T' für Sätze, die im Kontext einer täglichen Unterhaltung stehen. 
@@ -507,11 +511,6 @@ Phase_Bezeichnung;Phase_Name;Phase_Beschreibung
                 # Generate Answer
                 messages = [{"role": "user", "content": role + prompt}]
                 messages, answer = get_answer(language_model, tokenizer, messages, max_new_tokens=max_new_tokens)
-                '''
-                with open(f'step_2_{i+1}.txt', 'r', encoding='utf-8') as file:
-                    answer = file.readlines()
-                answer = "\n".join(answer) + '\n'
-                '''
                 
                 # Extract tagged block
                 block_answer = get_tagged_block(answer, '<Antwort 2>', '</Antwort 2>')
@@ -522,26 +521,34 @@ Phase_Bezeichnung;Phase_Name;Phase_Beschreibung
                 # Check format
                 correct_format = check_format(block_answer, ['Index', 'Start_Zeit', 'Relevanz', 'Grund'])
                 if not correct_format:
-                    print('\t\tColumns or rows do not match')
+                    if PRINT_MODE:
+                        print('\t\tColumns or rows do not match')
                     raise ValueError("Columns or rows do not match")
                 
                 # Concat
                 dfs_to_concat.append(block_to_df(block_answer))
                 
-                # For debugging
-                if PRINT_MODE:
+                # Output
+                if DEBUG_MODE:
                     with open(f'step_2_{i+1}.txt', 'w') as f:
                         for m in messages:
                             f.write('*'*50+' <'+m['role']+'> '+'*'*50+'\n')
                             f.write(m['content'])
-                            chat_container.append({"role": m['role'], "content": m['content']})
+                if LOG_MODE:
+                    for m in messages:
+                        chat_container.append({"role": m['role'], "content": m['content']})
                         
                 # Exit loop
                 n_try = limit_try
+                
             except:
-                print(f'\t\tConnot genreate step_2_{i+1}.txt, will try again')
                 n_try += 1
-                if n_try == limit_try: limit_try = -1
+                if n_try == limit_try: 
+                    limit_try = -1
+                
+                if PRINT_MODE:
+                    print(f'\t\tConnot genreate step_2_{i+1}.txt, will try again')
+                
     
     df_to_rewrite = pd.concat(dfs_to_concat)
     df_to_rewrite = pd.concat([df_filled, df_to_rewrite], axis=1)
@@ -568,7 +575,8 @@ Phase_Bezeichnung;Phase_Name;Phase_Beschreibung
         n_try = 0
         while n_try < limit_try:
             try:
-                print(f'\tStep 3: {int(i+1)}/{num_sub_dfs} max new tokens: {max_new_tokens}')
+                if PRINT_MODE:
+                    print(f'\tStep 3: {int(i+1)}/{num_sub_dfs} max new tokens: {max_new_tokens}')
                 
                 prompt = """\n* Anweisung: Du erhältst einen Datensatz mit einer Reihe von Sätzen im Abschnitt <Daten>. Die Daten enthalten einen Index, die Startzeit der Rede, den gesprochenen Satz, eine Bezeichnung für die Operationsphase. Vielmehr zeigt die Relevanzssplate an, ob der Satz zu den täglichen (mit 'T' markiert) oder chirurgischen (mit 'C' markiert) Gesprächen gehört, während Grund erklärt, warum die Relevanzspalte mit 'T' oder 'C' bezeichnet ist. 
 * Aufgabe: Deine Aufgabe ist es, die Sätze in der Spalte "Text" der bereitgestellten Daten in mehreren Schritten umzuformulieren. In diesem Schritt wirst du speziell die ausgewählten Teile der Daten umformulieren, die im Abschnitt <Antwort 3> aufgeführt sind. Gehe jeden Satz in der Spalte 'Text' einzeln durch. Formuliere die Sätze wie folgt um: Wenn die Spalte "Relevanz" mit 'C' markiert ist, gib die Ereignisse aus dem Text wieder, drücke sie aber in deinen eigenen Worten aus. Wenn die Spalte "Relevanz" mit 'T' markiert ist, gib Sie die Ereignisse im Text nicht wieder, sondern behandel ein anderes Tagesthema, das du dich ausgedacht hat.
@@ -589,33 +597,42 @@ Phase_Bezeichnung;Phase_Name;Phase_Beschreibung
                 
                 # Check format
                 correct_format = check_format(block_answer, ['Index', 'Start_Zeit', 'Phase_Bezeichnung', 'Text'])
+                if not correct_format:
+                    raise ValueError(f"Columns or rows do not match")
+
+                # Order columns
                 df_answer = block_to_df(block_answer)
                 df_answer = df_answer[['Start_Zeit', 'Text', 'Phase_Bezeichnung']]
+                
+                # Check phase column not numeric error
                 df_answer['Phase_Bezeichnung'] = df_answer['Phase_Bezeichnung'].apply(pd.to_numeric)
-                if not correct_format:
-                    print('\t\tColumns or rows do not match')
-                    raise ValueError(f"Columns or rows do not match")
     
                 # Check language
-                #TODO
+                # TODO
                 
                 # Concat
                 dfs_to_concat.append(df_answer)
                 
-                # For debugging
-                if PRINT_MODE:
+                # Output
+                if DEBUG_MODE:
                     with open(f'step_3_{i+1}.txt', 'w') as f:
                         for m in messages:
                             f.write('*'*50+' <'+m['role']+'> '+'*'*50+'\n')
                             f.write(m['content'])
-                            chat_container.append({"role": m['role'], "content": m['content']})
+                if LOG_MODE:
+                    for m in messages:
+                        chat_container.append({"role": m['role'], "content": m['content']})
                 
                 # Exit loop
                 n_try = limit_try
+                
             except:
-                print(f'\t\tConnot genreate step_3_{i+1}.txt, will try again')
                 n_try += 1
-                if n_try == limit_try: raise ValueError(f"Can't generate data:(")
+                if n_try == limit_try: 
+                    raise ValueError(f"Can't generate data:(")
+                
+                if PRINT_MODE:
+                    print(f'\t\tConnot genreate step_3_{i+1}.txt, will try again')
 
     # Merge dataframes and process
     result_df = pd.concat(dfs_to_concat)
@@ -683,7 +700,8 @@ if __name__ == "__main__":
     seedset = ['OP_005.csv', 'OP_023.csv', 'OP_027.csv', 'OP_040.csv', 
                'OP_035.csv', 'OP_002.csv', 'OP_038.csv', 'OP_013.csv',
                'OP_011.csv', 'OP_022.csv', 'OP_007.csv', 'OP_019.csv', 
-               'OP_039.csv', 'OP_026.csv', 'OP_016.csv', 'OP_009.csv', 'OP_032.csv'] #006 -> 500+, 17, 24 --> 250+
+               'OP_039.csv', 'OP_026.csv', 'OP_016.csv', 'OP_009.csv', 
+               'OP_032.csv'] #006 -> 500+, 17, 24 --> 250+
     
     dataset = [os.path.join(data_path, s) for s in seedset]
 
@@ -702,7 +720,6 @@ if __name__ == "__main__":
         # select sample data
         random.shuffle(dataset)
         sample_data = dataset[0]
-        
         print(f"Target: {save_name}\tSource: {sample_data}")
         
         # generate data, save and log
@@ -718,7 +735,7 @@ if __name__ == "__main__":
 
             df.to_csv(save_name)
             
-            # update trainset
+            # update trainset, consider whole gpu node
             for g in os.listdir(args.target_path):
                 if g.endswith('.csv'):
                     dataset.append(os.path.join(args.target_path, g))
