@@ -641,11 +641,11 @@ Phase_Bezeichnung;Phase_Name;Phase_Beschreibung
         'Phase_Bezeichnung': 'Phase_Label'
     })
     result_df['Text'] = result_df['Text'].str.strip()
-    result_df.to_csv('backup.csv')
     
     # Remove log files
-    for file in listdir('./', ending='.txt'):
-        os.remove(file) 
+    if DEBUG_MODE:
+        for file in listdir('./', ending='.txt'):
+            os.remove(file) 
     
     return result_df, chat_container
         
@@ -699,9 +699,8 @@ if __name__ == "__main__":
     data_path = 'Transcripts/'
     seedset = ['OP_005.csv', 'OP_023.csv', 'OP_027.csv', 'OP_040.csv', 
                'OP_035.csv', 'OP_002.csv', 'OP_038.csv', 'OP_013.csv',
-               'OP_011.csv', 'OP_022.csv', 'OP_007.csv', 'OP_019.csv', 
-               'OP_039.csv', 'OP_026.csv', 'OP_016.csv', 'OP_009.csv', 
-               'OP_032.csv'] #006 -> 500+, 17, 24 --> 250+
+               'OP_011.csv', 'OP_007.csv', 'OP_019.csv', 'OP_032.csv',
+               'OP_039.csv', 'OP_026.csv', 'OP_016.csv', 'OP_009.csv'] #006 -> 500+, 17, 22, 24 --> 250+
     
     dataset = [os.path.join(data_path, s) for s in seedset]
 
@@ -754,5 +753,5 @@ if __name__ == "__main__":
 
         # uppps
         except:
-            print(f"{save_name} could not generated\nTrying again!")
+            print(f"\t{save_name} could not generated. Trying again!")
             error_count += 1
