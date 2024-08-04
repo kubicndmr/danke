@@ -5,10 +5,12 @@ import time
 import torch
 import random
 import argparse
+import matplotlib
 import subprocess
 import numpy as np
 import pandas as pd
 import huggingface_hub
+import matplotlib.pyplot as plt
 
 from dotenv import load_dotenv
 from transformers import AutoTokenizer
@@ -19,7 +21,105 @@ LOG_MODE = True
 DEBUG_MODE = False
 PRINT_MODE = False
 
-############################## Functions ##############################    
+############################## Functions, Classes ##############################
+class PoCaPCorpus():
+    def __init__(self, seedset, num_generate):
+        self.dataset = seedset
+        self.num_generate = num_generate
+        self.index = 0
+        self.sample_index = 0
+        self.init_corpus()
+    
+    def init_corpus(self):
+        self.phase_count = np.zeros((self.num_generate+len(self.dataset), 8))
+        self.percentage_count = np.zeros((self.num_generate+len(self.dataset), 8))
+        
+        for d in self.dataset:
+            array_count = np.zeros(8, dtype=int)
+            df = pd.read_csv(d)
+            phases = df['Phase_Label'].value_counts().drop(8, errors='ignore')
+            array_count[phases.index] = phases.values
+            self.add_count(array_count)
+        self.update_quantiles()
+            
+    def add_count(self, array_count):
+        self.phase_count[self.index, :] = array_count
+        self.percentage_count[self.index, :] = array_count / np.sum(array_count)
+        self.index += 1
+    
+    def get_sample_data(self):
+        return self.dataset[self.sample_index%len(self.dataset)]
+    
+    def add_to_dataset(self, data):
+        self.dataset[self.sample_index%len(self.dataset)] = data
+        self.sample_index += 1
+        
+    def update_quantiles(self):
+        self.lower_quantile_phase = np.quantile(self.phase_count[:self.index,:], 0.25, axis=0)
+        self.upper_quantile_phase = np.quantile(self.phase_count[:self.index,:], 0.75, axis=0)
+        self.lower_quantile_percent = np.quantile(self.percentage_count[:self.index,:], 0.25, axis=0)
+        self.upper_quantile_percent = np.quantile(self.percentage_count[:self.index,:], 0.75, axis=0)
+    
+    def sample_d_a(self, phase, percent_count, phase_count):
+        if (percent_count <= self.lower_quantile_percent[phase] or 
+            phase_count <= self.lower_quantile_phase[phase]):
+            d = np.random.uniform(0.1, 0.2)
+            a = np.random.uniform(0.2, 0.3) #106.25
+        elif (percent_count >= self.upper_quantile_percent[phase] or
+              phase_count >= self.upper_quantile_phase[phase]):
+            d = np.random.uniform(0.2, 0.3)
+            a = np.random.uniform(0.2, 0.3) #93.75
+        else:
+            d = np.random.uniform(0.1, 0.2)
+            a = np.random.uniform(0.12647, 0.22647) #99,99995
+        return d, a
+    
+            
+    def plot_violin(self):
+        def_cmap = matplotlib.colormaps.get_cmap('tab10')
+        color_list = def_cmap(np.linspace(0, 1, 9))
+        
+        fig, axs = plt.subplots(1, 2, figsize=(20, 9), dpi=75)
+        
+        '''
+        for i in range(0,8):
+            data = self.phase_count[:self.index, i]
+            axs[0].scatter([i]*len(data), data, color=color_list[i], edgecolor='black', alpha=0.7)
+        '''
+        violins = axs[0].violinplot(
+            self.phase_count[:self.index], 
+            showmeans=False, 
+            showmedians=True, 
+            showextrema=False
+        )
+        for j, pc in enumerate(violins['bodies']):
+            pc.set_facecolor(color_list[j])
+            pc.set_edgecolor('black')  # Optionally set edge color
+            pc.set_alpha(0.7)  # Optionally set transparency
+                 
+        #axs[0].set_ylim(-1, 150)
+        axs[0].set_ylabel('#Sentences', fontsize=16)
+        axs[0].set_xlabel('Surgical Phases', fontsize=16)
+        axs[0].tick_params(axis='x', labelsize=14)
+        axs[0].tick_params(axis='y', labelsize=14)
+        
+        violins = axs[1].violinplot(
+            self.percentage_count[:self.index], 
+            showmeans=False, 
+            showmedians=True, 
+            showextrema=False
+        )
+        for j, pc in enumerate(violins['bodies']):
+            pc.set_facecolor(color_list[j])
+            pc.set_edgecolor('black')  # Optionally set edge color
+            pc.set_alpha(0.7)  # Optionally set transparency
+        
+        #axs[1].set_ylim(-0.01, 0.6)
+        axs[1].set_ylabel('Percentage', fontsize=16)
+        axs[1].set_xlabel('Surgical Phases', fontsize=16)
+        axs[1].tick_params(axis='x', labelsize=14)
+        axs[1].tick_params(axis='y', labelsize=14)
+        
 def prefix(id, name='', buffer=5):
     return name + str(id).zfill(buffer)
 
@@ -214,11 +314,11 @@ def generate_d_a(q_low, q_high, p, eta=0):
         a = np.random.uniform(0.2, 0.3) #93.75
     else:
         d = np.random.uniform(0.1, 0.2)
-        a = np.random.uniform(0.12, 0.22) #99,875
+        a = np.random.uniform(0.12647, 0.22647) #99,99995
     return d, a
 
 
-def drop_and_add(df, qtile_low, qtile_high):
+def drop_and_add(df, pocap):
     '''
     This functions drops randomly selected rows from given dataframe,
     and adds empty rows in 'Text' column with '"Ausfüllen"' tag on randomly 
@@ -248,7 +348,7 @@ def drop_and_add(df, qtile_low, qtile_high):
     df = df[df['Text'] != '<nicht verstanden>']
     df = df[~df['Phase_Bezeichnung'].isin([8, '8'])]
 
-    # Get phase distribution
+    # Get phase distribution of given data
     count = np.zeros(8, dtype=int)
     phases = df['Phase_Bezeichnung'].value_counts().drop(8, errors='ignore')
     count[phases.index] = phases.values
@@ -257,14 +357,14 @@ def drop_and_add(df, qtile_low, qtile_high):
     # Find number of lines to drop and add
     to_add = np.zeros(len(count), dtype=int)
     to_drop = np.zeros(len(count), dtype=int)
-    for i, (p, c, q_l, q_u) in enumerate(zip(percentage, count, qtile_low, qtile_high)):
+    for i, (p, c) in enumerate(zip(percentage, count)):
         if c == 0:
             pass
         if c > 0 and c < 3:
             to_drop[i] = 0
             to_add[i] = 1
         else:   
-            d, a = generate_d_a(q_l, q_u, p)
+            d, a = pocap.sample_d_a(i, p, c)
             to_drop[i] = np.ceil(c * d)
             to_add[i] = np.ceil(c * a)
 
@@ -347,6 +447,12 @@ def drop_and_add(df, qtile_low, qtile_high):
     df_to_fill = df_to_fill[df_to_fill['Text'] == fill_tag]
     df_to_fill['Grund'] = fill_tag
     
+    # update pocap
+    count = np.zeros(8, dtype=int)
+    phases = df['Phase_Bezeichnung'].value_counts().drop(8, errors='ignore')
+    count[phases.index] = phases.values
+    pocap.add_count(count)
+    
     return df, df_to_fill
 
 
@@ -369,7 +475,7 @@ def check_format(block, columns, generation_tag='*Ausfüllen*'):
     return columns_flag * rows_flag
         
 
-def gen_data(language_model, tokenizer, sample_data, qtile_low, qtile_high):
+def gen_data(language_model, tokenizer, pocap):
     '''
     Generates synthetic data
                         
@@ -382,41 +488,29 @@ def gen_data(language_model, tokenizer, sample_data, qtile_low, qtile_high):
     sample_data     : DataFrame
                         Example surgical operation transcript
     '''
+    sample_data = pocap.get_sample_data()
+    chat_container = [{'Sample':sample_data}]
+    
     ############################## Step 1 ##############################
     # Variables
     limit_try = 3
-    chat_container = []
-    max_token_generation = 1000
+    tokens_per_row = 30
+    max_token_generation = 750
     
-    # Prepare Role Prompt
-    role = """* Rolle: Du bist ein hilfsbereites künstlicher Assistent, der die Sprache der Chirurgen in der radiologischen Abteilung nachahmt, die Operationen zur Platzierung von Portkathetern durchführen. Das Ziel ist es, Gespräche eines Chirurgen mit dem medizinischen Assistenten und dem Patienten während einer Port-Katheter-Platzierung zu generieren. Die neu generierten Daten werden für das Training eines textbasierten Deep-Learning-Modells verwendet, das entwickelt wurde, um die chirurgischen Phasen der Port-Katheter-Placement-Operation zu erkennen. Die Phasen der Operation wurden im Abschnitt <Operation> angegeben. Alle Gespräche in den Daten müssen ausschließlich auf Deutsch geführt werden."""
-    role += """<Operation>
-Phase_Bezeichnung;Phase_Name;Phase_Beschreibung
-0;Vorbereitung;Der Patient wird auf die Operation vorbereitet, was die Desinfektion der Haut, die Auswahl der Punktionsstelle und die Bereitstellung der erforderlichen medizinischen Instrumente umfasst.
-1;Punktion;Eine große Vene, typischerweise die Vena subclavia oder Vena jugularis interna, wird mit der Hilfe Ultraschall punktiert, um einen Zugang zum venösen System zu schaffen.
-2;Positionierung des Führungsdrahtes;Ein Führungsdraht wird durch die Punktionsnadel in die Vene eingeführt und dient als Leitschiene für den Katheter.
-3;Vorbereitung des Pouches und Platzierung des Katheters;Ein subkutanes Reservoir (Port-Pouch) wird vorbereitet, und der Katheter wird durch einen Tunnel unter der Haut zum Pouch geführt.
-4;Positionierung des Katheters;Der Katheter wird über den Führungsdraht in die Vene vorgeschoben und bis in die gewünschte Position, meist nahe dem Herzen, platziert.
-5;Anpassung des Katheters;Der Katheter wird auf die erforderliche Länge zugeschnitten und fest mit dem Port verbunden, um eine stabile Platzierung zu gewährleisten.
-6;Kontrolle der Katheter;Die korrekte Positionierung und Funktion des Katheters werden durch bildgebende Verfahren (Digitale Subtraktionsangiographie) überprüft.
-7;Abschluss;Die Hautschnitte werden vernäht, ein steriler Verband wird angelegt, und der Patient wird überwacht, bis er sich vollständig von der Narkose erholt hat.
-</Operation>
-"""
+    # System Prompt
+    role = """* System: Du bist ein hilfsbereites Assistent, das die Chirurgen mit der Hilfe der Beispieldaten nachahmt. Die Aufgabe ist es, künstliche Gespräche eines Chirurgen mit dem medizinischen Assistenten und dem Patienten während einer Port-Katheter-Platzierung Operation zu generieren. Die neu generierten Daten werden für das Training eines textbasierten Deep-Learning-Modells verwendet, das entwickelt wurde, um die chirurgischen Phasen der Port-Katheter-Placement-Operation zu erkennen."""
+    
     # Prepare Data
-    df_org = pd.read_csv(sample_data, index_col=0)
-    df_org = df_org.rename(columns={'Start_Time': 'Start_Zeit', 'Phase_Label': 'Phase_Bezeichnung'})
-    
-    df_daa, df_to_fill = drop_and_add(df_org, qtile_low, qtile_high)
-    
-    # Prepare prompt iteratively
-    dfs_to_concat = []
-    tokens_per_row = 50
-    num_sub_dfs = tokens_per_row*len(df_to_fill) // max_token_generation + 1
+    df_sample = pd.read_csv(sample_data, index_col=0)
+    df_sample = df_sample.rename(columns={'Start_Time': 'Start_Zeit', 'Phase_Label': 'Phase_Bezeichnung'})
+    df_sample, df_to_fill = drop_and_add(df_sample, pocap)
+    df_to_print = df_sample.copy()
+    df_to_print.drop(columns=['Start_Zeit'], inplace=True)
     
     # Sliding window
-    df_to_print = df_daa.copy()
-    df_to_print.drop(columns=['Start_Zeit'], inplace=True)
-        
+    dfs_to_concat = []
+    num_sub_dfs = tokens_per_row*len(df_to_fill) // max_token_generation + 1
+            
     for i, sub_df in enumerate(df_splitter(df_to_fill, num_sub_dfs)):
         max_new_tokens = tokens_per_row*len(sub_df)
         
@@ -427,9 +521,11 @@ Phase_Bezeichnung;Phase_Name;Phase_Beschreibung
                 if PRINT_MODE:
                     print(f'\tStep 1: {int(i+1)}/{num_sub_dfs} max new tokens: {max_new_tokens}')
                 
-                prompt = """\n* Anweisung: Du erhältst einen Datensatz mit einer Reihe von Sätzen im Abschnitt <Daten>. Die Daten enthalten einen Index, die Startzeit der Rede, den gesprochenen Satz und eine Bezeichnung für die Operationsphase. Allerdings fehlen einige Daten in der Textspalte. 
-* Aufgabe: Deine Aufgabe ist es, die Zeilen in der Spalte 'Text', die mit '"Ausfüllen"' markiert sind, in mehreren Schritten zu ergänzen. In diesem Schritt wirst du speziell die ausgewählten Teile der Daten ergänzen, die im Abschnitt <Antwort 1> aufgeführt sind. Generiere Sätze der Chirurgen, die mit den vorgegebenen Phasen im Abschnitt „Operation“ übereinstimmen. Stell dich sicher, dass die Nachbarsätzen anknüpfen, wobei der Kontext erhalten bleibt. Verwende die Spalte 'Grund' in der Vorlage <Antwort 1>, um mit 10 Wörtern zu erklären, warum du dich für diese Sätze entschieden hast.
-* Still: Du sollst die Daten in einem konsistenten Stil mit dem unten angegebenen Daten erstellen. Verwende die gesamten Daten in den Abschnitten <Daten> und <Operation>, um den Kontext der Gespräche zu verstehen. Antworte unbedingt im CSV-Format als in der Vorlage <Antwort 1>."""
+                prompt = """\nIn diesem Schritt wirst du die fehlenden Konversationen in den gegebenen Daten ergänzen.
+* Daten: Du erhältst einen Datensatz mit fehlenden Unterhaltungen im Abschnitt <Daten> zu ergänzen. Die Daten enthalten einen Index, die Startzeit der Rede, den gesprochenen Satz eines Chirurgen und eine Bezeichnung für die Operationsphase. 
+* Operation: Die phasen der Port-Katheter-Platzierung Operation sind folgendes: 0)Vorbereitung, 1)Punktion, 2)Positionierung des Führungsdrahtes, 3)Vorbereitung des Pouches und Platzierung des Katheters, 4)Positionierung des Katheters, 5)Anpassung des Katheters, 6)Kontrolle der Katheter, 7)Abschluss.
+* Aufgabe: Deine Aufgabe ist es, die Zeilen in der Spalte 'Text', die mit '"Ausfüllen"' markiert sind, in mehreren Schritten zu ergänzen. In diesem Schritt wirst du speziell die ausgewählten Teile der Daten ergänzen, die im Abschnitt <Antwort 1> aufgeführt sind. Generiere Sätze der Chirurgen, die mit den vorgegebenen Phasen übereinstimmen. Stell dich sicher, dass die Nachbarsätzen anknüpfen, wobei der Kontext erhalten bleibt.
+* Format: Ergänze nur die Zeilen im Abschinitt <Antwort 1>. Erstelle die Daten in einem konsistenten Stil mit den unten angegebenen Daten. Antworte nur auf Deutsch und im CSV-Format als in der Vorlage <Antwort 1>."""
                 prompt += f"\n<Daten>\n{df_to_print.to_csv(index=True, sep=';', index_label='Index')}</Daten>\n"
                 prompt += f"\n<Antwort 1>\n{sub_df.to_csv(index=True, sep=';', index_label='Index')}</Antwort 1>\n"
     
@@ -444,11 +540,8 @@ Phase_Bezeichnung;Phase_Name;Phase_Beschreibung
                 block_answer = line_errors(block_answer, len(sub_df))
                 
                 # Check format
-                correct_format = check_format(block_answer, ['Index', 'Start_Zeit', 'Text', 'Phase_Bezeichnung', 'Grund'])
-                if not correct_format:
-                    if PRINT_MODE:
-                        print('\t\tColumns or rows do not match')
-                    raise ValueError(f"Columns or rows do not match")
+                correct_format = check_format(block_answer, ['Index', 'Start_Zeit', 'Text', 'Phase_Bezeichnung'])
+                if not correct_format: raise ValueError(f"Columns or rows do not match")
                 
                 # Concat
                 dfs_to_concat.append(block_to_df(block_answer))
@@ -459,9 +552,10 @@ Phase_Bezeichnung;Phase_Name;Phase_Beschreibung
                         for m in messages:
                             f.write('*'*50+' <'+m['role']+'> '+'*'*50+'\n')
                             f.write(m['content'])
-                if LOG_MODE:
-                    for m in messages:
-                        chat_container.append({"role": m['role'], "content": m['content']})
+                
+                # Add to chat
+                for m in messages:
+                    chat_container.append({"role": m['role'], "content": m['content']})
                 
                 # Exit loop
                 n_try = limit_try
@@ -473,28 +567,26 @@ Phase_Bezeichnung;Phase_Name;Phase_Beschreibung
 
     df_empty_rows = pd.concat(dfs_to_concat)
     df_empty_rows['Text'] = df_empty_rows['Text'].str.replace('"""', '')
-    df_filled = df_daa.copy()
-    df_filled.loc[df_empty_rows.index, 'Text'] = df_empty_rows['Text']
+    df_sample.loc[df_empty_rows.index, 'Text'] = df_empty_rows['Text']
     
     ############################## Step 2 ##############################
-    # Variables
+    #Variables
     limit_try = 3
     dfs_to_concat = []
-    tokens_per_row = 50
-    max_token_generation = 1000
-    num_sub_dfs = tokens_per_row*len(df_filled) // max_token_generation + 1
+    tokens_per_row = 30
+    max_token_generation = 500
+    num_sub_dfs = tokens_per_row*len(df_sample) // max_token_generation + 1
     
-    # Sliding window
-    df_to_print = df_filled.copy()
+    # Sliding Window
+    df_to_print = df_sample.copy()
     df_to_print.drop(columns=['Start_Zeit'], inplace=True)
     
-    for i, sub_df in enumerate(df_splitter(df_filled, num_sub_dfs)):
+    for i, sub_df in enumerate(df_splitter(df_sample, num_sub_dfs)):
         # Work data
-        sub_df = sub_df.drop(columns=['Text', 'Phase_Bezeichnung'])
-        sub_df['Relevanz'] = "*Ausfüllen*"
-        sub_df['Grund'] = "*Ausfüllen*"
+        sub_df['Text'] = '*Ausfüllen*'
+        sub_df = sub_df[['Start_Zeit', 'Phase_Bezeichnung', 'Text']]
         max_new_tokens = tokens_per_row*len(sub_df)
-                
+        
         # Try limit_try times, if Gemma cant follow instructions
         n_try = 0
         while n_try < limit_try:
@@ -502,9 +594,11 @@ Phase_Bezeichnung;Phase_Name;Phase_Beschreibung
                 if PRINT_MODE:
                     print(f'\tStep 2: {int(i+1)}/{num_sub_dfs} max new tokens: {max_new_tokens}')
                 
-                prompt = """\n* Anweisung: Du erhältst einen Datensatz mit einer Reihe von Sätzen im Abschnitt <Daten>. Die Daten enthalten einen Index, die Startzeit der Rede, den gesprochenen Satz und eine Bezeichnung für die Operationsphase. 
-* Aufgabe: Deine Aufgabe ist die einzeln gegebenen Sätze in der Spalte „Text“ in mehreren Schritten analizieren und bestimmen, ob die Sätze für die Erkennung der in der Spalte 'Phase_Bezeichnung' angegebenen chirurgischen Phasen wichtig sind. In diesem Schritt wirst du speziell mit der ausgewählten Teile der Daten arbeiten, die im Abschnitt <Antwort 2> aufgeführt sind. Markiere 'C' für Sätze, die für die Erkennung chirurgischer Phasen relevant sind, und 'T' für Sätze, die im Kontext einer täglichen Unterhaltung stehen. 
-* Still: Verwende die gesamte Daten im <Daten> Abschnitt um die Kontext der Gescprähe zu erfahren. gib deine Antwort in der Splate 'Relevanz' im Abschnitt <Antwort 2>. Verwende die Spalte 'Grund' in der Vorlage im <Antwort 2> Bereich, um mit maximal zwei Wörtern zu erklären, warum du dich für diese Sätze entschieden hast. Antworte unbedingt im CSV-Format als in der Vorlage <Antwort 2>."""
+                prompt = """In diesem Schritt wirst du die Konversationen umformulieren.
+* Daten: Du erhältst einen Datensatz mit fehlenden Unterhaltungen im Abschnitt <Daten> zu ergänzen. Die Daten enthalten einen Index, die Startzeit der Rede, den gesprochenen Satz eines Chirurgen und eine Bezeichnung für die Operationsphase. 
+* Operation: Die phasen der Port-Katheter-Platzierung Operation sind folgendes: 0)Vorbereitung, 1)Punktion, 2)Positionierung des Führungsdrahtes, 3)Vorbereitung des Pouches und Platzierung des Katheters, 4)Positionierung des Katheters, 5)Anpassung des Katheters, 6)Kontrolle der Katheter, 7)Abschluss.
+* Aufgabe: Deine Aufgabe ist es, die Sätze in der Spalte "Text" der bereitgestellten Daten in mehreren Schritten umzuformulieren. In diesem Schritt wirst du speziell die ausgewählten Teile der Daten umformulieren, die im Abschnitt <Antwort 2> aufgeführt sind. Zu diesem Zweck schreibe die Sätze so um, dass, wenn das Gespräch mit einer chirurgischen Tätigkeit zusammenhängt, du diesen Kontext beim Umschreiben beibehaltest. Wenn die Konversation keinen Bezug zu einer chirurgischen Tätigkeit hat, führe neue Konversationen.
+* Format: Formuliere nur die Zeilen im Abschinitt <Antwort 2> um. Erstelle die Daten in einem konsistenten Stil mit den unten angegebenen Daten. Antworte nur auf Deutsch und im CSV-Format als in der Vorlage <Antwort 2>."""
                 prompt += f"\n<Daten>\n{df_to_print.to_csv(index=True, sep=';', index_label='Index')}</Daten>\n"
                 prompt += f"\n<Antwort 2>\n{sub_df.to_csv(index=True, sep=';', index_label='Index')}</Antwort 2>\n"
                 
@@ -517,98 +611,20 @@ Phase_Bezeichnung;Phase_Name;Phase_Beschreibung
 
                 # Check line shapes/errors
                 block_answer = line_errors(block_answer, len(sub_df))
-
-                # Check format
-                correct_format = check_format(block_answer, ['Index', 'Start_Zeit', 'Relevanz', 'Grund'])
-                if not correct_format:
-                    if PRINT_MODE:
-                        print('\t\tColumns or rows do not match')
-                    raise ValueError("Columns or rows do not match")
-                
-                # Concat
-                dfs_to_concat.append(block_to_df(block_answer))
-                
-                # Output
-                if DEBUG_MODE:
-                    with open(f'step_2_{i+1}.txt', 'w') as f:
-                        for m in messages:
-                            f.write('*'*50+' <'+m['role']+'> '+'*'*50+'\n')
-                            f.write(m['content'])
-                if LOG_MODE:
-                    for m in messages:
-                        chat_container.append({"role": m['role'], "content": m['content']})
-                        
-                # Exit loop
-                n_try = limit_try
-                
-            except:
-                n_try += 1
-                if n_try == limit_try: 
-                    limit_try = -1
-                
-                if PRINT_MODE:
-                    print(f'\t\tConnot genreate step_2_{i+1}.txt, will try again')
-                
-    
-    df_to_rewrite = pd.concat(dfs_to_concat)
-    df_to_rewrite = pd.concat([df_filled, df_to_rewrite], axis=1)
-    
-    ############################## Step 3 ##############################
-    #Variables
-    limit_try = 3
-    dfs_to_concat = []
-    tokens_per_row = 50
-    max_token_generation = 850
-    num_sub_dfs = tokens_per_row*len(df_to_rewrite) // max_token_generation + 1
-    
-    # Sliding Window
-    df_to_print = df_to_rewrite.copy()
-    df_to_print.drop(columns=['Start_Zeit'], inplace=True)
-    
-    for i, sub_df in enumerate(df_splitter(df_daa, num_sub_dfs)):
-        # Work data
-        sub_df['Text'] = '*Ausfüllen*'
-        sub_df = sub_df[['Start_Zeit', 'Phase_Bezeichnung', 'Text']]
-        max_new_tokens = tokens_per_row*len(sub_df)
-        
-        # Try limit_try times, if Gemma cant follow instructions
-        n_try = 0
-        while n_try < limit_try:
-            try:
-                if PRINT_MODE:
-                    print(f'\tStep 3: {int(i+1)}/{num_sub_dfs} max new tokens: {max_new_tokens}')
-                
-                prompt = """\n* Anweisung: Du erhältst einen Datensatz mit einer Reihe von Sätzen im Abschnitt <Daten>. Die Daten enthalten einen Index, die Startzeit der Rede, den gesprochenen Satz, eine Bezeichnung für die Operationsphase. Vielmehr zeigt die Relevanzssplate an, ob der Satz zu den täglichen (mit 'T' markiert) oder chirurgischen (mit 'C' markiert) Gesprächen gehört, während Grund erklärt, warum die Relevanzspalte mit 'T' oder 'C' bezeichnet ist. 
-* Aufgabe: Deine Aufgabe ist es, die Sätze in der Spalte "Text" der bereitgestellten Daten in mehreren Schritten umzuformulieren. In diesem Schritt wirst du speziell die ausgewählten Teile der Daten umformulieren, die im Abschnitt <Antwort 3> aufgeführt sind. Gehe jeden Satz in der Spalte 'Text' einzeln durch. Formuliere die Sätze wie folgt um: Wenn die Spalte "Relevanz" mit 'C' markiert ist, gib die Ereignisse aus dem Text wieder, drücke sie aber in deinen eigenen Worten aus. Wenn die Spalte "Relevanz" mit 'T' markiert ist, gib Sie die Ereignisse im Text nicht wieder, sondern behandel ein anderes Tagesthema, das du dich ausgedacht hat.
-* Still: Verwende die gesamte Daten im <Daten> Abschnitt um die Kontext der Gescprähe zu erfahren. Generiere keine Passivsätze und verwende die Perspektive der dritten Person nicht. Gib deine Antwort in der Splate 'Text', die mit '*Ausfüllen*' markiert sind. Antworte unbedingt im CSV-Format als in der Vorlage <Antwort 3>.*"""
-
-                prompt += f"\n<Daten>\n{df_to_print.to_csv(index=True, sep=';', index_label='Index')}</Daten>\n"
-                prompt += f"\n<Antwort 3>\n{sub_df.to_csv(index=True, sep=';', index_label='Index')}</Antwort 3>\n"
-                
-                # Generate Answer
-                messages = [{"role": "user", "content": role + prompt}]
-                messages, answer = get_answer(language_model, tokenizer, messages, max_new_tokens=max_new_tokens)
-                
-                # Extract tagged block
-                block_answer = get_tagged_block(answer, '<Antwort 3>', '</Antwort 3>')
-
-                # Check line shapes/errors
-                block_answer = line_errors(block_answer, len(sub_df))
                 
                 # Check format
                 correct_format = check_format(block_answer, ['Index', 'Start_Zeit', 'Phase_Bezeichnung', 'Text'])
-                if not correct_format:
-                    raise ValueError(f"Columns or rows do not match")
-
-                # Order columns
+                if not correct_format: raise ValueError(f"Columns or rows do not match")
+                
+                # Order columns                
                 df_answer = block_to_df(block_answer)
                 df_answer = df_answer[['Start_Zeit', 'Text', 'Phase_Bezeichnung']]
                 
-                # Check phase column not numeric error
+                # Check phase-column-not-numeric error
                 df_answer['Phase_Bezeichnung'] = df_answer['Phase_Bezeichnung'].apply(pd.to_numeric)
     
                 # Check language
-                # TODO
+                # maybe TODO
                 
                 # Concat
                 dfs_to_concat.append(df_answer)
@@ -701,47 +717,28 @@ if __name__ == "__main__":
                'OP_035.csv', 'OP_002.csv', 'OP_038.csv', 'OP_013.csv',
                'OP_011.csv', 'OP_007.csv', 'OP_019.csv', 'OP_032.csv',
                'OP_039.csv', 'OP_026.csv', 'OP_016.csv', 'OP_009.csv'] #006 -> 500+, 17, 22, 24 --> 250+
-    
-    dataset = [os.path.join(data_path, s) for s in seedset]
-
-    validset = ['OP_012.csv', 'OP_001.csv', 'OP_008.csv', 'OP_031.csv', 
-                'OP_029.csv', 'OP_004.csv', 'OP_025.csv', 'OP_003.csv']
-    validset = sorted([os.path.join(data_path, v) for v in validset])
-    
-    # Compute quantiles    
-    qtile_low, qtile_high = get_stats(dataset + validset)
+    seedset = sorted([os.path.join('Transcripts/', s) for s in seedset])
+    pocap = PoCaPCorpus(seedset=seedset, num_generate=args.num_target)
 
     # Generate Data
     while prefix_idx <= end_idx and error_count < error_patience:
         # set save name
         save_name = args.target_path + prefix(prefix_idx+1, 'SynOP_') + ".csv"
         
-        # select sample data
-        random.shuffle(dataset)
-        sample_data = dataset[0]
-        print(f"Target: {save_name}\tSource: {sample_data}")
-        
-        # generate data, save and log
         try:
+            # generate data
             generation_start = time.time()
             df, chat_container = gen_data(
                 language_model=gemma2, 
-                tokenizer=gemma2_tokenizer, 
-                sample_data=sample_data, 
-                qtile_low=qtile_low, 
-                qtile_high=qtile_high
+                tokenizer=gemma2_tokenizer,
+                pocap=pocap 
             )
 
+            # save
             df.to_csv(save_name)
-            
-            # update trainset, consider whole gpu node
-            for g in os.listdir(args.target_path):
-                if g.endswith('.csv'):
-                    dataset.append(os.path.join(args.target_path, g))
             
             # save log
             with open(save_name[:-4] + ".txt", "w") as f:
-                f.write('Refence Data:'+sample_data+'\n')
                 for c in chat_container:
                     f.write('\n'+'*'*50+' <'+c['role']+'> '+'*'*50+'\n')
                     f.write(c['content'])
