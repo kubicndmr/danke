@@ -366,7 +366,7 @@ def drop_and_add(df, pocap):
                 phase_df = pd.concat([phase_df.iloc[:idx], empty_row, phase_df.iloc[idx:]]).reset_index(drop=True)
                 
         phase_dfs.append(phase_df)
-    
+
     # Concat
     df = pd.concat(phase_dfs).reset_index(drop=True)
     
@@ -490,7 +490,8 @@ def gen_data(language_model, tokenizer, pocap):
     # Sliding window
     dfs_to_concat = []
     num_sub_dfs = tokens_per_row*len(df_to_fill) // max_token_generation + 1
-            
+    steps_complete = np.zeros(num_sub_dfs)
+    
     for i, sub_df in enumerate(df_splitter(df_to_fill, num_sub_dfs)):
         max_new_tokens = tokens_per_row*len(sub_df)
         sub_df['Phase_Bezeichnung'] = sub_df['Phase_Bezeichnung'].map(label_dic)
@@ -543,6 +544,7 @@ def gen_data(language_model, tokenizer, pocap):
                 
                 # Exit loop
                 n_try = limit_try
+                steps_complete[i] = 1
                 
             except:
                 n_try += 1
@@ -552,7 +554,7 @@ def gen_data(language_model, tokenizer, pocap):
     df_empty_rows = pd.concat(dfs_to_concat)
     df_empty_rows['Text'] = df_empty_rows['Text'].str.replace('"""', '')
     df_sample.loc[df_empty_rows.index, 'Text'] = df_empty_rows['Text']
-    assert n_try != limit_try, "The number of tries has reached the limit."
+    assert np.prod(steps_complete) == 1, "Not all steps completed"
     
     ############################## Step 2 ##############################
     #Variables
@@ -561,6 +563,7 @@ def gen_data(language_model, tokenizer, pocap):
     tokens_per_row = 50
     max_token_generation = 500
     num_sub_dfs = tokens_per_row*len(df_sample) // max_token_generation + 1
+    steps_complete = np.zeros(num_sub_dfs)
     
     # Sliding Window
     df_to_print = df_sample.copy()
@@ -626,6 +629,7 @@ def gen_data(language_model, tokenizer, pocap):
                 
                 # Exit loop
                 n_try = limit_try
+                steps_complete[i] = 1
                 
             except:
                 n_try += 1
@@ -635,6 +639,9 @@ def gen_data(language_model, tokenizer, pocap):
                 if PRINT_MODE:
                     print(f'\t\tConnot genreate step_3_{i+1}.txt, will try again')
 
+    # Check if all steps completed
+    assert np.prod(steps_complete) == 1, "Not all steps completed"
+    
     # Merge dataframes and process
     result_df = pd.concat(dfs_to_concat)
     result_df = result_df.rename(columns={
