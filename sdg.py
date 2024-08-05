@@ -3,7 +3,6 @@ import sys
 import copy
 import time
 import torch
-import random
 import argparse
 import matplotlib
 import subprocess
@@ -76,6 +75,7 @@ class PoCaPCorpus():
         return d, a
             
     def plot_violin(self, target_path='./'):
+        plt.rcParams["font.family"] = "Times New Roman"
         def_cmap = matplotlib.colormaps.get_cmap('tab10')
         color_list = def_cmap(np.linspace(0, 1, 9))
         
@@ -503,10 +503,19 @@ def gen_data(language_model, tokenizer, pocap):
                 if PRINT_MODE:
                     print(f'\tStep 1: {int(i+1)}/{num_sub_dfs} max new tokens: {max_new_tokens}')
                 
-                prompt = """\nIn diesem Schritt wirst du die fehlenden Konversationen in den gegebenen Daten ergänzen.
-* Daten: Du erhältst einen Datensatz mit fehlenden Unterhaltungen im Abschnitt <Daten> zu ergänzen. Die Daten enthalten einen Index, die Startzeit der Rede, den gesprochenen Satz eines Chirurgen und eine Bezeichnung für die Operationsphase. 
-* Operation: Die phasen der Port-Katheter-Platzierung Operation sind folgendes: 0)Vorbereitung, 1)Punktion, 2)Positionierung des Führungsdrahtes, 3)Vorbereitung des Pouches und Platzierung des Katheters, 4)Positionierung des Katheters, 5)Anpassung des Katheters, 6)Kontrolle der Katheter, 7)Abschluss.
-* Aufgabe: Deine Aufgabe ist es, die Zeilen in der Spalte 'Text', die mit '"Ausfüllen"' markiert sind, in mehreren Schritten zu ergänzen. In diesem Schritt wirst du speziell die ausgewählten Teile der Daten ergänzen, die im Abschnitt <Antwort 1> aufgeführt sind. Generiere Sätze der Chirurgen, die mit den vorgegebenen Phasen übereinstimmen. Stell dich sicher, dass die Nachbarsätzen anknüpfen, wobei der Kontext erhalten bleibt.
+                prompt = """\nIn diesem Schritt wirst du die fehlenden Konversationen in den gegebenen Daten ergänzen, indem du gegebene chirurgische Phasen berücksichtigst und die entsprechende Schritte wiederherstelst.
+* Operation: Chirurgische Phasen und chirurgische Schritte darstellen eine typische Port-Katheter-Platzierung Operation. Die Phasen beziehen sich auf die großen Abschnitte des Verfahrens, in denen die wichtigsten Schritte beschrieben werden. Chirurgische Schritte sind die spezifischen Aufgaben, die innerhalb jeder Phase ausgeführt werden sollen. Operationen folgen im Allgemeinen dieser Reihenfolge der Ereignisse, mit Ausnahmen. Verwende bei der Datenerstellung die Informationen über die aktuelle chirurgische Phase und die erforderlichen Schritte, um diese Ereignisse wiederherzustellen. Die Phasen und Schritte sind folgendes:
+- Phase 0: Vorbereitung. Schritte: 0.1) Positionierung des Patienten auf dem Tisch 0.2) Tisch fährt hoch 0.3) Radiologe in Sterilität 0.5) Vorbereitung des sterilen Materials 0.6) Patient in Sterilität
+- Phase 1: Punktion. Schritte: 1.1) Lokale Anästhesie, 1.2 Ultraschallgeführte Punktion
+- Phase 2: Positionierung des Führungsdrahtes. Schritte: 2.1) Röntgenmaschine fährt ein, 2.2) Durchleuchtung im Bereich der Subklavia, 2.3) Durchleuchtung im Bereich der Vena cava inferior (VCI), 2.4) Röntgenmaschine fährt heraus
+- Phase 3: Vorbereitung des Pouches und Platzierung des Katheters. Schritte: 3.1) Lokale Anästhesie, 3.2) Inzision, 4.3) Vorbereitung des Pouches
+- Phase 4: Positionierung des Katheters. Schritte: 4.1) Röntgenmaschine fährt ein, 4.2) Durchleuchtung des VCI-Bereichs, 4.3) Positionierung des Katheters
+- Phase 5: Anpassung des Katheters. Schritte: 5.1) Kürzen des Katheters, 5.2) Röntgenmaschine fährt aus, 5.3) Anschluss des Katheters an die Portkapsel, 5.4) Positionierung der Portkapsel im Pouch, 5.5) Chirurgische Naht, 5.6) Punktion der Portkapsel
+- Phase 6: Kontrolle der Katheter. Schritte: 6.1) Röntgenmaschine fährt ein, 6.2) Digitale Subtraktionsangiographie des Brust 6.3) Röntgenmaschine fährt in Parkposition aus
+- Phase 7: Abschluss. Schritte: 7.1) Steriles Pflaster auflegen, 7.2) Tisch fährt nach unten
+* Daten: Du erhältst einen Datensatz mit fehlenden Unterhaltungen im Abschnitt <Daten> zu ergänzen. Die Daten enthalten einen Index, die Startzeit der Rede, den gesprochenen Satz eines Chirurgen und eine Bezeichnung für die Operationsphase.
+* Aufgabe: Deine Aufgabe ist es, die Zeilen in der Spalte 'Text', die mit '"Ausfüllen"' markiert sind, in mehreren Schritten zu ergänzen, indem du gegebene chirurgische Phasen berücksichtigst und die entsprechende Schritte wiederherstelst. In diesem Schritt wirst du speziell die ausgewählten Teile der Daten ergänzen, die im Abschnitt <Antwort 1> aufgeführt sind. Stell dich sicher, dass die Nachbarsätzen anknüpfen, wobei der Kontext erhalten bleibt.
+* Strategie: Stelle zunächst fest, welche Phase gerade läuft. Entscheide dann, welcher Schritt zuletzt ausgeführt wird. Entscheide, ob dieser Schritt fortgesetzt wird oder der nächste Schritt durchgeführt werden soll. Generiere entsprechend Sätze zu diesem Schritt. Wenn du Hilfe bei der Durchführung dieser Schritte benötigst, z. B. um das Röntgengerät an den richtigen Ort zu fahren, frage an die Assistentin. Du führst auch gelegentlich Gespräche über alltägliche Themen, um den Patienten zu entspannen.
 * Format: Ergänze nur die Zeilen im Abschinitt <Antwort 1>. Erstelle die Daten in einem konsistenten Stil mit den unten angegebenen Daten. Antwort nur auf Deutsch. Antwort im CSV-Format wie in der Vorlage <Antwort 1> und verwende immer die Tags <Antwort 1> und </Antwort 1> am Anfang und Ende deiner Antwort."""
                 prompt += f"\n<Daten>\n{df_to_print.to_csv(index=True, sep=';', index_label='Index')}</Daten>\n"
                 prompt += f"\n<Antwort 1>\n{sub_df.to_csv(index=True, sep=';', index_label='Index')}</Antwort 1>\n"
@@ -716,7 +725,7 @@ if __name__ == "__main__":
     while prefix_idx <= end_idx and error_count < error_patience:
         try:
             # set save name
-            save_name = args.target_path + prefix(prefix_idx+1, 'SynOP_') + ".csv"
+            save_name = os.path.join(args.target_path, prefix(prefix_idx+1, 'SynOP_')+".csv")
             print(f"Generating: {save_name}")
         
             # generate data
