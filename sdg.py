@@ -20,7 +20,7 @@ LOG_MODE = True
 DEBUG_MODE = False
 PRINT_MODE = False
 
-############################## Functions, Classes ##############################
+####################################### Functions, Classes #######################################
 class PoCaPCorpus():
     def __init__(self, seedset, num_generate):
         self.index = 0
@@ -75,7 +75,7 @@ class PoCaPCorpus():
         return d, a
             
     def plot_violin(self, target_path='./'):
-        plt.rcParams["font.family"] = "Times New Roman"
+        #plt.rcParams["font.family"] = "Times New Roman"
         def_cmap = matplotlib.colormaps.get_cmap('tab10')
         color_list = def_cmap(np.linspace(0, 1, 9))
         
@@ -313,7 +313,7 @@ def drop_and_add(df, pocap):
     df_to_fill      : pd.DataFrame
                         DataFrame with only empty rows.
     '''
-    fill_tag = '*Ausfüllen*'
+    fill_tag = '*fehlende Daten*'
     
     # Remove unrelated parts
     df = df.drop(columns=['File_Name', 'End_Time'], errors='ignore')
@@ -427,8 +427,39 @@ def drop_and_add(df, pocap):
     return df, df_to_fill
 
 
+def merge_small_groups(groups, min_size=6):
+        merged_groups = []
+        current_group = groups[0]
+
+        for next_group in groups[1:]:
+            if len(current_group) < min_size:
+                current_group = pd.concat([current_group, next_group])
+            else:
+                merged_groups.append(current_group)
+                current_group = next_group
+
+        # Add the last group
+        if len(current_group) < min_size and merged_groups:
+            merged_groups[-1] = pd.concat([merged_groups[-1], current_group])
+        else:
+            merged_groups.append(current_group)
+        
+        return merged_groups
+
+
 def df_splitter(df, num_sub_dfs=4):
-    return np.array_split(df, num_sub_dfs)
+    max_df_length = len(df) // num_sub_dfs
+    split_dfs = []
+
+    for _, split_df in df.groupby('Phase_Bezeichnung'):
+        if len(split_df) <= max_df_length:
+            split_dfs.append(split_df)
+        else:
+            num_split = int(np.ceil(len(split_df) / max_df_length))
+            sub_dfs = np.array_split(split_df, num_split)
+            split_dfs.extend(sub_dfs)
+    
+    return merge_small_groups(split_dfs)
 
 
 def check_format(block, columns, generation_tag='*Ausfüllen*'):
@@ -466,11 +497,11 @@ def gen_data(language_model, tokenizer, pocap):
     label_dic = {
         0: 'Vorbereitung', 1: 'Punktion', 2: 'Führungsdraht',
         3: 'Katheterplatzierung', 4: 'Katheterpositionierung', 5: 'Katheteranpassung',
-        6: 'Kathetersteuerung', 7: 'Abschluss'
+        6: 'Katheterkontrolle', 7: 'Abschluss'
     }
     reverse_label_dic = {v: k for k, v in label_dic.items()}
     
-    ############################## Step 1 ##############################
+    ####################################### Step 1 #######################################
     # Variables
     limit_try = 3
     tokens_per_row = 50
@@ -490,9 +521,10 @@ def gen_data(language_model, tokenizer, pocap):
     # Sliding window
     dfs_to_concat = []
     num_sub_dfs = tokens_per_row*len(df_to_fill) // max_token_generation + 1
-    steps_complete = np.zeros(num_sub_dfs)
+    df_splits = df_splitter(df_to_fill, num_sub_dfs)
+    steps_complete = np.zeros(len(df_splits))
     
-    for i, sub_df in enumerate(df_splitter(df_to_fill, num_sub_dfs)):
+    for i, sub_df in enumerate(df_splits):
         max_new_tokens = tokens_per_row*len(sub_df)
         sub_df['Phase_Bezeichnung'] = sub_df['Phase_Bezeichnung'].map(label_dic)
         
@@ -501,10 +533,13 @@ def gen_data(language_model, tokenizer, pocap):
         while n_try < limit_try:
             try:
                 if PRINT_MODE:
-                    print(f'\tStep 1: {int(i+1)}/{num_sub_dfs} max new tokens: {max_new_tokens}')
+                    print(f'\tStep 1: {int(i+1)}/{len(df_splits)} max new tokens: {max_new_tokens}')
+                ####################################### Step 1.1 #######################################
+                which_phase = sub_df['Phase_Bezeichnung'].unique()
+                sub_print_df = df_to_print[df_to_print['Phase_Bezeichnung'].isin(which_phase)]
                 
-                prompt = """\nIn diesem Schritt wirst du die fehlenden Konversationen in den gegebenen Daten ergänzen, indem du gegebene chirurgische Phasen berücksichtigst und die entsprechende Schritte wiederherstelst.
-* Operation: Chirurgische Phasen und chirurgische Schritte darstellen eine typische Port-Katheter-Platzierung Operation. Die Phasen beziehen sich auf die großen Abschnitte des Verfahrens, in denen die wichtigsten Schritte beschrieben werden. Chirurgische Schritte sind die spezifischen Aufgaben, die innerhalb jeder Phase ausgeführt werden sollen. Operationen folgen im Allgemeinen dieser Reihenfolge der Ereignisse, mit Ausnahmen. Verwende bei der Datenerstellung die Informationen über die aktuelle chirurgische Phase und die erforderlichen Schritte, um diese Ereignisse wiederherzustellen. Die Phasen und Schritte sind folgendes:
+                prompt = """Du wirst die chirurgischen Phasen und Schritte einer Operation festlegen.
+* Operation: Chirurgische Phasen und chirurgische Schritte darstellen eine typische Operation. Die Phasen beziehen sich auf die großen Abschnitte des Verfahrens, in denen die wichtigsten Schritte beschrieben werden. Chirurgische Schritte sind die spezifischen Aufgaben, die innerhalb jeder Phase ausgeführt werden sollen. Operationen folgen im Allgemeinen dieser Reihenfolge der Ereignisse, mit Ausnahmen. Die Phasen und Schritte der Port-Katheter-Platzierung Operation sind folgendes:
 - Phase 0: Vorbereitung. Schritte: 0.1) Positionierung des Patienten auf dem Tisch 0.2) Tisch fährt hoch 0.3) Radiologe in Sterilität 0.5) Vorbereitung des sterilen Materials 0.6) Patient in Sterilität
 - Phase 1: Punktion. Schritte: 1.1) Lokale Anästhesie, 1.2 Ultraschallgeführte Punktion
 - Phase 2: Positionierung des Führungsdrahtes. Schritte: 2.1) Röntgenmaschine fährt ein, 2.2) Durchleuchtung im Bereich der Subklavia, 2.3) Durchleuchtung im Bereich der Vena cava inferior (VCI), 2.4) Röntgenmaschine fährt heraus
@@ -513,27 +548,50 @@ def gen_data(language_model, tokenizer, pocap):
 - Phase 5: Anpassung des Katheters. Schritte: 5.1) Kürzen des Katheters, 5.2) Röntgenmaschine fährt aus, 5.3) Anschluss des Katheters an die Portkapsel, 5.4) Positionierung der Portkapsel im Pouch, 5.5) Chirurgische Naht, 5.6) Punktion der Portkapsel
 - Phase 6: Kontrolle der Katheter. Schritte: 6.1) Röntgenmaschine fährt ein, 6.2) Digitale Subtraktionsangiographie des Brust 6.3) Röntgenmaschine fährt in Parkposition aus
 - Phase 7: Abschluss. Schritte: 7.1) Steriles Pflaster auflegen, 7.2) Tisch fährt nach unten
-* Daten: Du erhältst einen Datensatz mit fehlenden Unterhaltungen im Abschnitt <Daten> zu ergänzen. Die Daten enthalten einen Index, die Startzeit der Rede, den gesprochenen Satz eines Chirurgen und eine Bezeichnung für die Operationsphase.
-* Aufgabe: Deine Aufgabe ist es, die Zeilen in der Spalte 'Text', die mit '"Ausfüllen"' markiert sind, in mehreren Schritten zu ergänzen, indem du gegebene chirurgische Phasen berücksichtigst und die entsprechende Schritte wiederherstelst. In diesem Schritt wirst du speziell die ausgewählten Teile der Daten ergänzen, die im Abschnitt <Antwort 1> aufgeführt sind. Stell dich sicher, dass die Nachbarsätzen anknüpfen, wobei der Kontext erhalten bleibt.
-* Strategie: Stelle zunächst fest, welche Phase gerade läuft. Entscheide dann, welcher Schritt zuletzt ausgeführt wird. Entscheide, ob dieser Schritt fortgesetzt wird oder der nächste Schritt durchgeführt werden soll. Generiere entsprechend Sätze zu diesem Schritt. Wenn du Hilfe bei der Durchführung dieser Schritte benötigst, z. B. um das Röntgengerät an den richtigen Ort zu fahren, frage an die Assistentin. Du führst auch gelegentlich Gespräche über alltägliche Themen, um den Patienten zu entspannen.
-* Format: Ergänze nur die Zeilen im Abschinitt <Antwort 1>. Erstelle die Daten in einem konsistenten Stil mit den unten angegebenen Daten. Antwort nur auf Deutsch. Antwort im CSV-Format wie in der Vorlage <Antwort 1> und verwende immer die Tags <Antwort 1> und </Antwort 1> am Anfang und Ende deiner Antwort."""
-                prompt += f"\n<Daten>\n{df_to_print.to_csv(index=True, sep=';', index_label='Index')}</Daten>\n"
-                prompt += f"\n<Antwort 1>\n{sub_df.to_csv(index=True, sep=';', index_label='Index')}</Antwort 1>\n"
-
-                # Generate Answer 1
+* Daten: Du erhältst einen Datensatz mit fehlenden Unterhaltungen im Abschnitt <Daten 1>. Die Daten enthalten einen Index, die Startzeit der Rede, den gesprochenen Satz eines Chirurgen und eine Bezeichnung für die Operationsphase.
+* Aufgabe: Verwende die Vorlage in Abschnitt <Antwort 1> und beantwort die Fragen."""
+                prompt += f"\n<Daten 1>\n{sub_print_df.to_csv(index=True, sep=';', index_label='Index')}</Daten 1>\n"
+                prompt += """
+<Antwort 1> 
+1.Welche chirurgische Phase enthalten die gegebenen Daten?
+2.Welche chirurgischen Schritte enthält diese Phase?
+3.Welche chirurgischen Schritte wurden abgeschlossen?
+4.Welche chirurgischen Schritte verbleiben in der Phase?
+</Antwort 1>
+"""             
+                # Generate Answer 1.1
                 messages = [{"role": "user", "content": role + prompt}]
+                messages, answer = get_answer(language_model, tokenizer, messages, max_new_tokens=400) 
+                
+                ####################################### Step 1.2 #######################################
+                prompt = """\nDu wirst die fehlenden Konversationen im Abschnitt <Daten 2> ergänzen, indem du generierte chirurgische Phasen und Schritte berücksichtigst.
+* Daten: Du erhältst einen Datensatz mit fehlenden Unterhaltungen im Abschnitt <Daten 2> zu ergänzen. Die Daten enthalten einen Index, die Startzeit der Rede, den gesprochenen Satz eines Chirurgen und eine Bezeichnung für die Operationsphase.
+* Aufgabe: Deine Aufgabe ist es, die Zeilen in der Spalte 'Text', die mit '"Ausfüllen"' markiert sind, zu ergänzen.
+* Strategie: Verwende die Informationen aus deiner vorherigen Antwort, bevor du die einzelnen Sätze erstellst. Berücksichtig zunächst, welche chirurgische Phase oder welcher Schritt gerade läuft. Entscheide dann, welcher Schritt zuletzt ausgeführt wird, und ob dieser Schritt fortgesetzt werden soll oder der nächste Schritt durchgeführt werden soll. Erzeuge entsprechende Sätze für diesen Schritt.
+* Stil: Erstelle die neue Sätze in einem konsistenten Stil mit den unten angegebenen Daten. Stell dich sicher, dass die Nachbarsätzen anknüpfen, wobei der Kontext erhalten bleibt. Wenn du als Chirurg eine Hilfe bei der Durchführung dieser Schritte benötigst, z. B. um das Röntgengerät an den richtigen Ort zu fahren, frage an die Assistentin. Du führst auch gelegentlich Gespräche über alltägliche Themen, um den Patienten zu entspannen.
+* Format: Gib deine anwort nur auf Deutsch und im Abschnitt < Antwort 2>. Antwort im CSV-Format wie in der Vorlage <Antwort 2> und verwende immer die Tags <Antwort 2> und </Antwort 2> am Anfang und Ende deiner Antwort."""
+                prompt += f"\n<Daten 2>\n{sub_print_df.to_csv(index=True, sep=';', index_label='Index')}</Daten 2>\n"
+                
+                sub_df['Text'] = sub_df['Text'].replace("*fehlende Daten*", "*Ausfüllen*")
+                prompt += f"\n<Antwort 2>\n{sub_df.to_csv(index=True, sep=';', index_label='Index')}</Antwort 2>\n"
+
+                # Generate Answer 1.2
+                messages.append({"role": "user", "content": prompt})
                 messages, answer = get_answer(language_model, tokenizer, messages, max_new_tokens=max_new_tokens) 
-                
+
                 # Extract tagged block
-                block_answer = get_tagged_block(answer, '<Antwort 1>', '</Antwort 1>')
-                
+                block_answer = get_tagged_block(answer, '<Antwort 2>', '</Antwort 2>')
+
+                # Remove Aufgabe 1
+                block_answer = block_answer
+
                 # Check line shapes/errors
                 block_answer = line_errors(block_answer, len(sub_df))
-                
+
                 # Check format
                 correct_format = check_format(block_answer, ['Index', 'Start_Zeit', 'Text', 'Phase_Bezeichnung'])
                 if not correct_format: raise ValueError(f"Columns or rows do not match")
-                
+
                 # Convert back phase string to integers
                 sub_df['Phase_Bezeichnung'] = sub_df['Phase_Bezeichnung'].map(reverse_label_dic)
                 
@@ -565,22 +623,20 @@ def gen_data(language_model, tokenizer, pocap):
     df_sample.loc[df_empty_rows.index, 'Text'] = df_empty_rows['Text']
     assert np.prod(steps_complete) == 1, "Not all steps completed"
     
-    ############################## Step 2 ##############################
+    ####################################### Step 2 #######################################
     #Variables
     limit_try = 3
     dfs_to_concat = []
     tokens_per_row = 50
     max_token_generation = 500
     num_sub_dfs = tokens_per_row*len(df_sample) // max_token_generation + 1
-    steps_complete = np.zeros(num_sub_dfs)
     
     # Sliding Window
-    df_to_print = df_sample.copy()
-    df_to_print.drop(columns=['Start_Zeit'], inplace=True)
+    df_splits = df_splitter(df_sample, num_sub_dfs)
+    steps_complete = np.zeros(len(df_splits))
     
-    for i, sub_df in enumerate(df_splitter(df_sample, num_sub_dfs)):
+    for i, sub_df in enumerate(df_splits):
         # Work data
-        sub_df['Text'] = '*Ausfüllen*'
         sub_df = sub_df[['Start_Zeit', 'Phase_Bezeichnung', 'Text']]
         max_new_tokens = tokens_per_row*len(sub_df)
         
@@ -589,16 +645,16 @@ def gen_data(language_model, tokenizer, pocap):
         while n_try < limit_try:
             try:
                 if PRINT_MODE:
-                    print(f'\tStep 2: {int(i+1)}/{num_sub_dfs} max new tokens: {max_new_tokens}')
+                    print(f'\tStep 2: {int(i+1)}/{len(df_splits)} max new tokens: {max_new_tokens}')
                 
                 prompt = """In diesem Schritt wirst du die Konversationen umformulieren.
 * Daten: Du erhältst einen Datensatz im Abschnitt <Daten>, um ihn umzuformulieren. Die Daten enthalten einen Index, die Startzeit der Rede, den gesprochenen Satz eines Chirurgen und eine Bezeichnung für die Operationsphase. 
-* Operation: Die phasen der Port-Katheter-Platzierung Operation sind folgendes: 0)Vorbereitung, 1)Punktion, 2)Positionierung des Führungsdrahtes, 3)Vorbereitung des Pouches und Platzierung des Katheters, 4)Positionierung des Katheters, 5)Anpassung des Katheters, 6)Kontrolle der Katheter, 7)Abschluss.
-* Aufgabe: Deine Aufgabe ist es, die Sätze in der Spalte "Text" der bereitgestellten Daten in mehreren Schritten umzuformulieren. In diesem Schritt wirst du speziell die ausgewählten Teile der Daten umformulieren, die im Abschnitt <Antwort 2> aufgeführt sind. Zu diesem Zweck schreibe die Sätze so um, dass, wenn das Gespräch mit einer chirurgischen Tätigkeit zusammenhängt, du diesen Kontext beim Umschreiben beibehaltest. Wenn die Konversation keinen Bezug zu einer chirurgischen Tätigkeit hat, führe neue Konversationen.
-* Format: Formuliere die Texte im Abschinitt <Antwort 2> um. Antwort nur auf Deutsch. Antwort im CSV-Format wie in der Vorlage <Antwort 2> und verwende immer die Tags <Antwort 2> und </Antwort 2> am Anfang und Ende deiner Antwort."""
-                prompt += f"\n<Daten>\n{df_to_print.to_csv(index=True, sep=';', index_label='Index')}</Daten>\n"
+* Aufgabe: Deine Aufgabe ist es, die Sätze in der Spalte "Text" im Abschnitt <Daten> umzuformulieren. Schreibe die Sätze so um, dass, wenn das Gespräch mit einer chirurgischen Tätigkeit zusammenhängt, du diesen Kontext beim Umschreiben beibehaltest. Wenn die Konversation keinen Bezug zu einer chirurgischen Tätigkeit hat, führe neue Konversationen.
+* Format: Gib deine anwort nur auf Deutsch und im Abschnitt < Antwort 2>. Antwort im CSV-Format wie in der Vorlage <Antwort 2> und verwende immer die Tags <Antwort 2> und </Antwort 2> am Anfang und Ende deiner Antwort."""
+                prompt += f"\n<Daten>\n{sub_df.to_csv(index=True, sep=';', index_label='Index')}</Daten>\n"
+                sub_df.loc[:, 'Text'] = '*Ausfüllen*'
                 prompt += f"\n<Antwort 2>\n{sub_df.to_csv(index=True, sep=';', index_label='Index')}</Antwort 2>\n"
-                
+
                 # Generate Answer 2
                 messages = [{"role": "user", "content": role + prompt}]
                 messages, answer = get_answer(language_model, tokenizer, messages, max_new_tokens=max_new_tokens)
@@ -663,11 +719,11 @@ def gen_data(language_model, tokenizer, pocap):
     if DEBUG_MODE:
         for file in listdir('./', ending='.txt'):
             os.remove(file) 
-    
+            
     return result_df, chat_container
         
 
-############################## Main ##############################
+####################################### Main #######################################
 if __name__ == "__main__":
     # Args
     parser = argparse.ArgumentParser(
@@ -715,10 +771,12 @@ if __name__ == "__main__":
     # Read reference data
     data_path = 'Transcripts/'
     seedset = ['OP_005.csv', 'OP_023.csv', 'OP_027.csv', 'OP_040.csv', 
-               'OP_035.csv', 'OP_002.csv', 'OP_038.csv', 'OP_013.csv',
+               'OP_035.csv', 'OP_038.csv', 'OP_013.csv', 'OP_009.csv',
                'OP_011.csv', 'OP_007.csv', 'OP_019.csv', 'OP_032.csv',
-               'OP_039.csv', 'OP_026.csv', 'OP_016.csv', 'OP_009.csv'] #006 -> 500+, 17, 22, 24 --> 250+
+               'OP_039.csv', 'OP_026.csv', 'OP_016.csv'] #006 -> 500+, 17, 22, 24 --> 250+, 2 --> double surgeon
     seedset = sorted([os.path.join('Transcripts/', s) for s in seedset])
+    
+    # PoCaP 
     pocap = PoCaPCorpus(seedset=seedset, num_generate=args.num_target)
 
     # Generate Data
