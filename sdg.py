@@ -733,6 +733,14 @@ if __name__ == "__main__":
                         default='SynPoCaP/',
                         help='path to save generated data')
     
+    parser.add_argument('-s', '--source_path', type=str,
+                        default=None,
+                        help='path of previously generated data, to be used in seeds')
+
+    parser.add_argument('-a', '--num_additional', 
+                        type=int, default=5,
+                        help='number of additional synthetic data to add seeds')        
+
     parser.add_argument('-n', '--num_target', 
                         type=int, default=1,
                         help='number of data to generate')
@@ -775,6 +783,12 @@ if __name__ == "__main__":
                'OP_011.csv', 'OP_007.csv', 'OP_019.csv', 'OP_032.csv',
                'OP_039.csv', 'OP_026.csv', 'OP_016.csv'] #006 -> 500+, 17, 22, 24 --> 250+, 2 --> double surgeon
     seedset = sorted([os.path.join('Transcripts/', s) for s in seedset])
+    
+    # If set, add synthetic data to seeds
+    if args.source_path != None:
+        sourceset = listdir(args.source_path, '.csv')
+        for i in np.random.randint(0, len(sourceset), args.num_additional):
+            seedset.append(sourceset[i])
     
     # PoCaP 
     pocap = PoCaPCorpus(seedset=seedset, num_generate=args.num_target)
