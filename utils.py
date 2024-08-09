@@ -189,7 +189,7 @@ def data_split(data_path, log_txt='log.txt', split=0.2, synthetic_data_path=None
     
     # split sets
     df['split'] = 'tr'
-    df.loc[:8-1, 'split'] = 'te'
+    df.loc[:testset_size-1, 'split'] = 'te'
     df.loc[testset_size:2*testset_size-1, 'split'] = 'va'
     
     df.drop(columns='percentage', inplace=True)

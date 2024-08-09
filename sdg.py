@@ -22,43 +22,39 @@ PRINT_MODE = False
 
 ####################################### Functions, Classes #######################################
 class PoCaPCorpus():
-    def __init__(self, seedset, num_generate):
-        self.index = 0
-        self.num_generate = num_generate
-        
-        self.init_corpus(seedset)
+    def __init__(self, seedset, target_path):
+        self.target_path = target_path
+        self.dataset = seedset
+        self.count_corpus()
+        self.compute_quantiles()
+        self.update_dataset()
     
-    def init_corpus(self, seedset):
-        self.dataset = ['']*len(seedset)
-        self.phase_count = np.zeros((self.num_generate+len(seedset), 8))
-        self.percentage_count = np.zeros((self.num_generate+len(seedset), 8))
-        
-        for d in seedset:
-            array_count = np.zeros(8, dtype=int)
-            df = pd.read_csv(d)
-            phases = df['Phase_Label'].value_counts().drop(8, errors='ignore')
-            array_count[phases.index] = phases.values
-            self.add_to_dataset(d)
-            self.add_count(array_count)
-        
-        self.update_quantiles()
+    def count_corpus(self):
+            self.phase_count = np.zeros((len(self.dataset), 8))
+            self.percentage_count = np.zeros((len(self.dataset), 8))
             
-    def add_count(self, array_count):
-        self.phase_count[self.index, :] = array_count
-        self.percentage_count[self.index, :] = array_count / np.sum(array_count)
+            for i, d in enumerate(self.dataset):
+                array_count = np.zeros(8, dtype=int)
+                df = pd.read_csv(d)
+                phases = df['Phase_Label'].value_counts().drop(8, errors='ignore')
+                array_count[phases.index] = phases.values
+                self.phase_count[i, :] = array_count
+                self.percentage_count[i, :] = array_count / np.sum(array_count)
     
     def get_sample_data(self):
-        return self.dataset[(self.index-len(self.dataset))%len(self.dataset)]
+        return np.random.choice(self.dataset)
     
-    def add_to_dataset(self, data):
-        self.dataset[(self.index-len(self.dataset))%len(self.dataset)] = data
-        self.index += 1
+    def update_dataset(self):
+        new_files = [os.path.join(self.target_path, gen) 
+                    for gen in os.listdir(self.target_path) 
+                    if gen.endswith('.csv') and os.path.join(self.target_path, gen) not in self.dataset]
+        self.dataset.extend(new_files)
         
-    def update_quantiles(self):
-        self.lower_quantile_phase = np.quantile(self.phase_count[:self.index,:], 0.25, axis=0)
-        self.upper_quantile_phase = np.quantile(self.phase_count[:self.index,:], 0.75, axis=0)
-        self.lower_quantile_percent = np.quantile(self.percentage_count[:self.index,:], 0.25, axis=0)
-        self.upper_quantile_percent = np.quantile(self.percentage_count[:self.index,:], 0.75, axis=0)
+    def compute_quantiles(self):
+        self.lower_quantile_phase = np.quantile(self.phase_count, 0.25, axis=0)
+        self.upper_quantile_phase = np.quantile(self.phase_count, 0.75, axis=0)
+        self.lower_quantile_percent = np.quantile(self.percentage_count, 0.25, axis=0)
+        self.upper_quantile_percent = np.quantile(self.percentage_count, 0.75, axis=0)
     
     def sample_d_a(self, phase, percent_count, phase_count):
         if (percent_count <= self.lower_quantile_percent[phase] or 
@@ -70,16 +66,29 @@ class PoCaPCorpus():
             d = np.random.uniform(0.2, 0.3)
             a = np.random.uniform(0.2, 0.3) #93.75
         else:
-            d = np.random.uniform(0.1, 0.2)
-            a = np.random.uniform(0.12647, 0.22647) #99,99995
+            d = np.random.uniform(0.15, 0.25)
+            a = np.random.uniform(0.2, 0.3) #100
         return d, a
             
-    def plot_violin(self, target_path='./'):
+    def plot_violin(self):
+        # update counts
+        phase_count = np.zeros((len(self.dataset), 8), dtype=int)
+        percentage_count = np.zeros((len(self.dataset), 8))
+        
+        for i, d in enumerate(self.dataset):
+            array_count = np.zeros(8, dtype=int)
+            df = pd.read_csv(d)
+            phases = df['Phase_Label'].value_counts().drop(8, errors='ignore')
+            array_count[phases.index] = phases.values
+            phase_count[i, :] = array_count
+            percentage_count[i, :] = array_count / np.sum(array_count)
+        
+        # plot
         #plt.rcParams["font.family"] = "Times New Roman"
         def_cmap = matplotlib.colormaps.get_cmap('tab10')
         color_list = def_cmap(np.linspace(0, 1, 9))
         
-        fig, axs = plt.subplots(1, 2, figsize=(20, 9), dpi=600)
+        fig, axs = plt.subplots(1, 2, figsize=(20, 9), dpi=75)
         
         '''
         for i in range(0,8):
@@ -87,7 +96,7 @@ class PoCaPCorpus():
             axs[0].scatter([i]*len(data), data, color=color_list[i], edgecolor='black', alpha=0.7)
         '''
         violins = axs[0].violinplot(
-            self.phase_count[:self.index], 
+            phase_count,
             showmeans=False, 
             showmedians=True, 
             showextrema=False
@@ -104,7 +113,7 @@ class PoCaPCorpus():
         axs[0].tick_params(axis='y', labelsize=14)
         
         violins = axs[1].violinplot(
-            self.percentage_count[:self.index], 
+            percentage_count, 
             showmeans=False, 
             showmedians=True, 
             showextrema=False
@@ -119,7 +128,8 @@ class PoCaPCorpus():
         axs[1].set_xlabel('Surgical Phases', fontsize=16)
         axs[1].tick_params(axis='x', labelsize=14)
         axs[1].tick_params(axis='y', labelsize=14)
-        fig.savefig(os.path.join(target_path, 'clas_dist.png'), bbox_inches='tight')
+        fig.savefig(os.path.join(self.target_path, 'clas_dist.png'), bbox_inches='tight')
+        
         
 def prefix(id, name='', buffer=5):
     return name + str(id).zfill(buffer)
@@ -414,12 +424,6 @@ def drop_and_add(df, pocap):
     
     df['Start_Zeit'] = df['Start_Zeit'].astype(float).round(3)
     
-    # update pocap
-    count = np.zeros(8, dtype=int)
-    phases = df['Phase_Bezeichnung'].value_counts()
-    count[phases.index] = phases.values
-    pocap.add_count(count)
-    
     # Copy also empty datatframe
     df_to_fill = df.copy()
     df_to_fill = df_to_fill[df_to_fill['Text'] == fill_tag]
@@ -515,9 +519,9 @@ def gen_data(language_model, tokenizer, pocap):
     df_sample = df_sample.rename(columns={'Start_Time': 'Start_Zeit', 'Phase_Label': 'Phase_Bezeichnung'})
     df_sample, df_to_fill = drop_and_add(df_sample, pocap)
     df_to_print = df_sample.copy()
+    
     df_to_print.drop(columns=['Start_Zeit'], inplace=True)
     df_to_print['Phase_Bezeichnung'] = df_to_print['Phase_Bezeichnung'].map(label_dic)
-    
     # Sliding window
     dfs_to_concat = []
     num_sub_dfs = tokens_per_row*len(df_to_fill) // max_token_generation + 1
@@ -775,13 +779,14 @@ if __name__ == "__main__":
         attn_implementation='eager',
         cache_dir=os.getenv('HF_CACHE_DIR')
     )
+
     
     # Read reference data
     data_path = 'Transcripts/'
     seedset = ['OP_005.csv', 'OP_023.csv', 'OP_027.csv', 'OP_040.csv', 
                'OP_035.csv', 'OP_038.csv', 'OP_013.csv', 'OP_009.csv',
-               'OP_011.csv', 'OP_007.csv', 'OP_019.csv', 'OP_032.csv',
-               'OP_039.csv', 'OP_026.csv', 'OP_016.csv'] #006 -> 500+, 17, 22, 24 --> 250+, 2 --> double surgeon
+               'OP_011.csv', 'OP_007.csv', 'OP_019.csv', 'OP_002.csv',
+               'OP_039.csv', 'OP_026.csv', 'OP_016.csv'] #006 -> 500+, 17, 22, 24, 32 --> 230+
     seedset = sorted([os.path.join('Transcripts/', s) for s in seedset])
     
     # If set, add synthetic data to seeds
@@ -791,7 +796,7 @@ if __name__ == "__main__":
             seedset.append(sourceset[i])
     
     # PoCaP 
-    pocap = PoCaPCorpus(seedset=seedset, num_generate=args.num_target)
+    pocap = PoCaPCorpus(seedset=seedset, target_path=args.target_path)
 
     # Generate Data
     while prefix_idx <= end_idx and error_count < error_patience:
@@ -808,9 +813,9 @@ if __name__ == "__main__":
                 pocap=pocap 
             )
 
-            # save
+            # save & update
             df.to_csv(save_name)
-            pocap.add_to_dataset(save_name)
+            pocap.update_dataset()
             
             # save log
             with open(save_name[:-4] + ".txt", "w") as f:
@@ -827,5 +832,5 @@ if __name__ == "__main__":
         except:
             print(f"\t{save_name} could not generated. Trying again!")
             error_count += 1
-            
-    pocap.plot_violin(args.target_path)
+
+    pocap.plot_violin()
