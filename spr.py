@@ -184,7 +184,7 @@ if __name__ == '__main__':
             
         # Validation Log
         error_valid[epoch] /= validset_size
-        utils.print_log(f"\Validation Loss\t: {error_valid[epoch].item()}", log_txt, display=True)
+        utils.print_log(f"\tValidation Loss\t: {error_valid[epoch].item()}", log_txt, display=True)
         wandb.log({"error_train":error_train[epoch], "error_valid": error_valid[epoch]})
         metrics_valid.epoch_end(epoch)
               

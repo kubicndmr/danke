@@ -27,7 +27,6 @@ class PoCaPCorpus():
         self.dataset = seedset
         self.count_corpus()
         self.compute_quantiles()
-        self.update_dataset()
     
     def count_corpus(self):
             self.phase_count = np.zeros((len(self.dataset), 8))
@@ -48,7 +47,8 @@ class PoCaPCorpus():
         new_files = [os.path.join(self.target_path, gen) 
                     for gen in os.listdir(self.target_path) 
                     if gen.endswith('.csv') and os.path.join(self.target_path, gen) not in self.dataset]
-        self.dataset.extend(new_files)
+        if len(new_files) != 0:
+            self.dataset.extend(new_files)
         
     def compute_quantiles(self):
         self.lower_quantile_phase = np.quantile(self.phase_count, 0.25, axis=0)
@@ -736,14 +736,6 @@ if __name__ == "__main__":
     parser.add_argument('-t', '--target_path', type=str,
                         default='SynPoCaP/',
                         help='path to save generated data')
-    
-    parser.add_argument('-s', '--source_path', type=str,
-                        default=None,
-                        help='path of previously generated data, to be used in seeds')
-
-    parser.add_argument('-a', '--num_additional', 
-                        type=int, default=5,
-                        help='number of additional synthetic data to add seeds')        
 
     parser.add_argument('-n', '--num_target', 
                         type=int, default=1,
@@ -780,7 +772,6 @@ if __name__ == "__main__":
         cache_dir=os.getenv('HF_CACHE_DIR')
     )
 
-    
     # Read reference data
     data_path = 'Transcripts/'
     seedset = ['OP_005.csv', 'OP_023.csv', 'OP_027.csv', 'OP_040.csv', 
@@ -789,14 +780,13 @@ if __name__ == "__main__":
                'OP_039.csv', 'OP_026.csv', 'OP_016.csv'] #006 -> 500+, 17, 22, 24, 32 --> 230+
     seedset = sorted([os.path.join('Transcripts/', s) for s in seedset])
     
-    # If set, add synthetic data to seeds
-    if args.source_path != None:
-        sourceset = listdir(args.source_path, '.csv')
-        for i in np.random.randint(0, len(sourceset), args.num_additional):
-            seedset.append(sourceset[i])
-    
     # PoCaP 
     pocap = PoCaPCorpus(seedset=seedset, target_path=args.target_path)
+    print(f"The seedset: {pocap.dataset}")
+    
+    # If exists, add synthetic data to pool
+    pocap.update_dataset()
+    print(f"Length of dataset: {len(pocap.dataset)}")
 
     # Generate Data
     while prefix_idx <= end_idx and error_count < error_patience:

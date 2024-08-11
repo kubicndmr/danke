@@ -11,7 +11,7 @@ class SPRDataset(Dataset):
         self.op_name = data_path.split('/')[-1][:-4]
 
     def __getitem__(self, index):
-        return [self.data['Start_Time'].iloc[index],
+        return [self.data.index[index],
                 torch.FloatTensor(self.data['Embeddings'].iloc[index]),
                 self.data['Phase_Label'].iloc[index]]
         
