@@ -19,6 +19,11 @@ LOG_MODE = True
 DEBUG_MODE = False
 PRINT_MODE = False
 
+if DEBUG_MODE:
+    np.random.seed(1)
+    torch.manual_seed(1)
+    torch.cuda.manual_seed(1)
+
 ####################################### Functions, Classes #######################################
 class PoCaPCorpus():
     def __init__(self, seedset, target_path):
@@ -484,12 +489,11 @@ def gen_data(tokenizer, language_model, pocap):
         3: 'Pouchvorbereitung-und-Katheterplatzierung', 4: 'Katheterpositionierung', 5: 'Katheteranpassung',
         6: 'Katheterkontrolle', 7: 'Abschluss'
     }
-    reverse_label_dic = {v: k for k, v in label_dic.items()}
     
     ####################################### Step 1 #######################################
     # Variables
     limit_try = 3
-    tokens_per_row = 60
+    tokens_per_row = 100
     
     # System Prompt
     role = """Du bist ein hilfsbereites Assistent, das die Chirurgen mit der Hilfe der Beispieldaten nachahmt. Die Aufgabe ist es, künstliche Gespräche eines Chirurgen mit dem medizinischen Assistenten und dem Patienten während einer Port-Katheter-Platzierung Operation zu generieren. Die neu generierten Daten werden für das Training eines textbasierten Deep-Learning-Modells verwendet, das entwickelt wurde, um die chirurgischen Phasen der Port-Katheter-Placement-Operation zu erkennen."""
@@ -553,15 +557,16 @@ def gen_data(tokenizer, language_model, pocap):
                 messages.append({"role": "assistant", "content": '\n'.join(block_answer)+'\n'})
                 
                 ####################################### Step 1.2 #######################################
-                prompt = """\nDu wirst die fehlenden Konversationen im Abschnitt <Daten 2> ergänzen, indem du generierte chirurgische Phasen und Schritte berücksichtigst.
-* Daten: Du erhältst einen Datensatz mit fehlenden Unterhaltungen im Abschnitt <Daten 2> zu ergänzen. Die Daten enthalten einen Index, die Startzeit der Rede, den gesprochenen Satz eines Chirurgen und eine Bezeichnung für die Operationsphase.
-* Aufgabe: Deine Aufgabe ist es, die Zeilen in der Spalte 'Text', die mit '"Ausfüllen"' markiert sind, zu ergänzen.
-* Strategie: Verwende die Informationen aus deiner vorherigen Antwort, bevor du die einzelnen Sätze erstellst. Berücksichtig zunächst, welche chirurgischen Schritte wurden abgeschlossen, welche chirurgische Phase oder welcher Schritt gerade läuft, und welche chirurgischen Schritte durchgeführt werden. Entscheide, welcher Schritt vor dem letzten indizierten fehlenden Satz ausgeführt wird und ob dieser Schritt fortgesetzt oder der nächste Schritt ausgeführt werden soll. Erzeuge entsprechende Sätze für diesen Schritt.
-* Stil: Erstelle die neue Sätze in einem konsistenten Stil mit den unten angegebenen Daten. Stell dich sicher, dass die Nachbarsätzen anknüpfen, wobei der Kontext erhalten bleibt. Wenn du als Chirurg eine Hilfe bei der Durchführung dieser Schritte benötigst, z. B. um das Röntgengerät an den richtigen Ort zu fahren, frage an die Assistentin. Du führst auch Gespräche über alltägliche Themen, um den Patienten zu entspannen.
+                prompt = """\nDu wirst die fehlenden Konversationen im Abschnitt <Daten 2> ergänzen, indem du chirurgische Phasen und Schritte berücksichtigst.
+* Daten: Du erhältst eine Analyse der chirurgischen Phasen und Schritte in deiner vorherigen Antwort und einen Datensatz mit fehlenden Unterhaltungen im Abschnitt <Daten 2>. Der Datensatz enthalt einen Index, die Startzeit der Rede, den gesprochenen Satz eines Chirurgen und eine Bezeichnung für die Operationsphase.
+* Aufgabe: Deine Aufgabe ist es, die Zeilen in der Spalte 'Text' und 'Schritte_Bezeichnung', die mit '"Ausfüllen"' markiert sind, zu ergänzen. Die Spalte Schritt_Bezeichnung zeigt an, welcher chirurgische Schritt in dieser Datenzeile läuft, und die Spalte Text zeigt das Gespräch des Chirurgen mit dem Arzthelfer oder dem Patienten im Operationssaal.
+* Strategie: Verwenden Sie die Analyse aus Ihrer vorherigen Antwort und gib zunächst in der Spalte 'Schritt_Bezeichnung' den laufenden Operationsschritt an. Berücksichtig, welche chirurgischen Phasen oder Schritte wurden abgeschlossen, oder durchgeführt werden. Dann erzeuge entsprechende Sätze für diesen Schritt in der Spalte 'Text'.
+* Stil: Erstelle die neue Sätze in einem konsistenten Stil mit den unten angegebenen Daten. Stell dich sicher, dass die Nachbarsätzen anknüpfen, wobei der Kontext erhalten bleibt. Wenn du als Chirurg eine Hilfe bei der Durchführung dieser Schritte benötigst, z. B. um das Röntgengerät an den richtigen Ort zu fahren, frage an die Assistentin. Wenn notwendige verfahrensbezogene Gespräche bereits abgeschlossen sind, aber noch Textzeilen auszufüllen sind, führ ein tägliches Gespräch mit dem Patienten, um ihn zu beruhigen.
 * Format: Gib deine anwort nur auf Deutsch und im Abschnitt < Antwort 2>. Antwort im CSV-Format wie in der Vorlage <Antwort 2> und verwende immer die Tags <Antwort 2> und </Antwort 2> am Anfang und Ende deiner Antwort."""
                 prompt += f"\n<Daten 2>\n{sub_print_df.to_csv(index=True, sep=';', index_label='Index')}</Daten 2>\n"
-                
+                sub_df['Schritt_Bezeichnung'] = "*Ausfüllen*"
                 sub_df['Text'] = sub_df['Text'].replace("*fehlende Daten*", "*Ausfüllen*")
+                sub_df = sub_df[['Start_Zeit', 'Phase_Bezeichnung', 'Schritt_Bezeichnung', 'Text']]
                 prompt += f"\n<Antwort 2>\n{sub_df.to_csv(index=True, sep=';', index_label='Index')}</Antwort 2>\n"
 
                 # Generate Answer 1.2
@@ -578,11 +583,8 @@ def gen_data(tokenizer, language_model, pocap):
                 block_answer = line_errors(block_answer, len(sub_df))
 
                 # Check format
-                correct_format = check_format(block_answer, ['Index', 'Start_Zeit', 'Text', 'Phase_Bezeichnung'])
+                correct_format = check_format(block_answer, ['Index','Start_Zeit', 'Phase_Bezeichnung', 'Schritt_Bezeichnung', 'Text'])
                 if not correct_format: raise ValueError(f"Columns or rows do not match")
-
-                # Convert back phase string to integers
-                sub_df['Phase_Bezeichnung'] = sub_df['Phase_Bezeichnung'].map(reverse_label_dic)
                 
                 # Concat
                 dfs_to_concat.append(block_to_df(block_answer))
