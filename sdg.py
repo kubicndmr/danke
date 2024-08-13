@@ -5,7 +5,6 @@ import time
 import torch
 import argparse
 import matplotlib
-import subprocess
 import numpy as np
 import pandas as pd
 import huggingface_hub
@@ -135,8 +134,8 @@ def prefix(id, name='', buffer=5):
     return name + str(id).zfill(buffer)
 
 
-def get_answer(language_model, tokenizer, messages, max_new_tokens, 
-               do_sample=True, top_p=0.95, temperature=1, repetition_penalty=1.05):
+def get_answer(tokenizer, language_model, messages, max_new_tokens, 
+               do_sample=True, top_p=0.95, temperature=1, repetition_penalty=1.1):
     """
     Generates a response from the model based on the provided chat history.
 
@@ -157,18 +156,20 @@ def get_answer(language_model, tokenizer, messages, max_new_tokens,
     prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     
     # Encode the prompt to input tensor
-    inputs = tokenizer.encode(prompt, add_special_tokens=False, return_tensors="pt")
+    inputs = tokenizer(prompt, return_tensors="pt")
+    inputs['input_ids'] = inputs['input_ids'].to(language_model.device)
     
     # Output
     if DEBUG_MODE:
         with open('prompt.txt', 'w') as f:
             f.write(prompt)
-            f.write(f"\nPrompt has {len(inputs[0])} tokens\n")
-            f.write(subprocess.run(['nvidia-smi'], capture_output=True, text=True).stdout)
+            f.write(f"\n\nPrompt has {len(inputs[0])} tokens")
     
     # Generate the model's response
     outputs = language_model.generate(
-        input_ids=inputs.to(language_model.device),
+        **inputs,
+        pad_token_id=tokenizer.eos_token_id,
+        eos_token_id=tokenizer.eos_token_id,
         max_new_tokens=max_new_tokens,
         do_sample=do_sample,
         top_p=top_p,
@@ -177,33 +178,14 @@ def get_answer(language_model, tokenizer, messages, max_new_tokens,
     )
         
     # Decode the model's output and update the chat history
-    response = tokenizer.decode(outputs[0], skip_special_tokens=False)
+    response = tokenizer.decode(outputs[0], skip_special_tokens=True)
     
     # Output
     if DEBUG_MODE:
         with open('response.txt', 'w') as f:
             f.write(response)
-            f.write(subprocess.run(['nvidia-smi'], capture_output=True, text=True).stdout)
     
-    # Extract the model's answer by splitting at the delimiter
-    answer = remove_generation_tokens(response)
-    answer = get_tagged_block(answer, '<start_of_turn>model', '<end_of_turn>')
-    answer = "\n".join(answer) + '\n'
-    messages.append({"role": "model", "content": answer})
-    
-    return messages, answer
-
-
-def remove_generation_tokens(text, bos_token='<bos>', eos_token='<eos>'):
-    clean_text = list()
-    for line in text.splitlines():
-        if bos_token in line:
-            line = line.replace(bos_token, '')
-        if eos_token in line:
-            line = line.replace(eos_token, '')
-        if line != '':
-            clean_text.append(line)
-    return "\n".join(clean_text)
+    return response
     
 
 def get_tagged_block(text, start_tag, end_tag):
@@ -451,8 +433,7 @@ def merge_small_groups(groups, min_size=6):
         return merged_groups
 
 
-def df_splitter(df, num_sub_dfs=4):
-    max_df_length = len(df) // num_sub_dfs
+def df_splitter(df, max_df_length=20):
     split_dfs = []
 
     for _, split_df in df.groupby('Phase_Bezeichnung'):
@@ -481,7 +462,7 @@ def check_format(block, columns, generation_tag='*Ausfüllen*'):
     return columns_flag * rows_flag
         
 
-def gen_data(language_model, tokenizer, pocap):
+def gen_data(tokenizer, language_model, pocap):
     '''
     Generates synthetic data
                         
@@ -500,7 +481,7 @@ def gen_data(language_model, tokenizer, pocap):
     
     label_dic = {
         0: 'Vorbereitung', 1: 'Punktion', 2: 'Führungsdraht',
-        3: 'Katheterplatzierung', 4: 'Katheterpositionierung', 5: 'Katheteranpassung',
+        3: 'Pouchvorbereitung-und-Katheterplatzierung', 4: 'Katheterpositionierung', 5: 'Katheteranpassung',
         6: 'Katheterkontrolle', 7: 'Abschluss'
     }
     reverse_label_dic = {v: k for k, v in label_dic.items()}
@@ -508,11 +489,10 @@ def gen_data(language_model, tokenizer, pocap):
     ####################################### Step 1 #######################################
     # Variables
     limit_try = 3
-    tokens_per_row = 50
-    max_token_generation = 500
+    tokens_per_row = 60
     
     # System Prompt
-    role = """* System: Du bist ein hilfsbereites Assistent, das die Chirurgen mit der Hilfe der Beispieldaten nachahmt. Die Aufgabe ist es, künstliche Gespräche eines Chirurgen mit dem medizinischen Assistenten und dem Patienten während einer Port-Katheter-Platzierung Operation zu generieren. Die neu generierten Daten werden für das Training eines textbasierten Deep-Learning-Modells verwendet, das entwickelt wurde, um die chirurgischen Phasen der Port-Katheter-Placement-Operation zu erkennen."""
+    role = """Du bist ein hilfsbereites Assistent, das die Chirurgen mit der Hilfe der Beispieldaten nachahmt. Die Aufgabe ist es, künstliche Gespräche eines Chirurgen mit dem medizinischen Assistenten und dem Patienten während einer Port-Katheter-Platzierung Operation zu generieren. Die neu generierten Daten werden für das Training eines textbasierten Deep-Learning-Modells verwendet, das entwickelt wurde, um die chirurgischen Phasen der Port-Katheter-Placement-Operation zu erkennen."""
     
     # Prepare Data
     df_sample = pd.read_csv(sample_data, index_col=0)
@@ -522,17 +502,17 @@ def gen_data(language_model, tokenizer, pocap):
     
     df_to_print.drop(columns=['Start_Zeit'], inplace=True)
     df_to_print['Phase_Bezeichnung'] = df_to_print['Phase_Bezeichnung'].map(label_dic)
+    
     # Sliding window
     dfs_to_concat = []
-    num_sub_dfs = tokens_per_row*len(df_to_fill) // max_token_generation + 1
-    df_splits = df_splitter(df_to_fill, num_sub_dfs)
+    df_splits = df_splitter(df_to_fill)
     steps_complete = np.zeros(len(df_splits))
     
     for i, sub_df in enumerate(df_splits):
         max_new_tokens = tokens_per_row*len(sub_df)
         sub_df['Phase_Bezeichnung'] = sub_df['Phase_Bezeichnung'].map(label_dic)
         
-        # Try limit_try times, if Gemma cant follow instructions
+        # Try limit_try times, if LM cant follow instructions
         n_try = 0
         while n_try < limit_try:
             try:
@@ -544,28 +524,33 @@ def gen_data(language_model, tokenizer, pocap):
                 
                 prompt = """Du wirst die chirurgischen Phasen und Schritte einer Operation festlegen.
 * Operation: Chirurgische Phasen und chirurgische Schritte darstellen eine typische Operation. Die Phasen beziehen sich auf die großen Abschnitte des Verfahrens, in denen die wichtigsten Schritte beschrieben werden. Chirurgische Schritte sind die spezifischen Aufgaben, die innerhalb jeder Phase ausgeführt werden sollen. Operationen folgen im Allgemeinen dieser Reihenfolge der Ereignisse, mit Ausnahmen. Die Phasen und Schritte der Port-Katheter-Platzierung Operation sind folgendes:
-- Phase 0: Vorbereitung. Schritte: 0.1) Positionierung des Patienten auf dem Tisch 0.2) Tisch fährt hoch 0.3) Radiologe in Sterilität 0.5) Vorbereitung des sterilen Materials 0.6) Patient in Sterilität
+- Phase 0: Vorbereitung. Schritte: 0.1) Positionierung des Patienten auf dem Tisch 0.2) Tisch fährt hoch 0.3) Radiologe sterilisiert sich 0.4) Vorbereitung des sterilen Materials 0.5) Patient steril abgedeckt
 - Phase 1: Punktion. Schritte: 1.1) Lokale Anästhesie, 1.2 Ultraschallgeführte Punktion
-- Phase 2: Positionierung des Führungsdrahtes. Schritte: 2.1) Röntgenmaschine fährt ein, 2.2) Durchleuchtung im Bereich der Subklavia, 2.3) Durchleuchtung im Bereich der Vena cava inferior (VCI), 2.4) Röntgenmaschine fährt heraus
-- Phase 3: Vorbereitung des Pouches und Platzierung des Katheters. Schritte: 3.1) Lokale Anästhesie, 3.2) Inzision, 4.3) Vorbereitung des Pouches
-- Phase 4: Positionierung des Katheters. Schritte: 4.1) Röntgenmaschine fährt ein, 4.2) Durchleuchtung des VCI-Bereichs, 4.3) Positionierung des Katheters
-- Phase 5: Anpassung des Katheters. Schritte: 5.1) Kürzen des Katheters, 5.2) Röntgenmaschine fährt aus, 5.3) Anschluss des Katheters an die Portkapsel, 5.4) Positionierung der Portkapsel im Pouch, 5.5) Chirurgische Naht, 5.6) Punktion der Portkapsel
-- Phase 6: Kontrolle der Katheter. Schritte: 6.1) Röntgenmaschine fährt ein, 6.2) Digitale Subtraktionsangiographie des Brust 6.3) Röntgenmaschine fährt in Parkposition aus
+- Phase 2: Führungsdraht. Schritte: 2.1) Röntgenmaschine fährt ein, 2.2) Durchleuchtung im Bereich der Subklavia, 2.3) Durchleuchtung im Bereich der Vena cava inferior (VCI), 2.4) Röntgenmaschine fährt heraus
+- Phase 3: Pouchvorbereitung-und-Katheterplatzierung. Schritte: 3.1) Lokale Anästhesie, 3.2) Inzision, 3.3) Pouch-Vorbereitung 3.4) Hülleplatzierung
+- Phase 4: Katheterpositionierung. Schritte: 4.1) Röntgenmaschine fährt ein, 4.2) Durchleuchtung des VCI-Bereichs, 4.3) Positionierung des Katheters
+- Phase 5: Katheteranpassung. Schritte: 5.1) Kürzen des Katheters, 5.2) Röntgenmaschine fährt aus, 5.3) Anschluss des Katheters an die Portkapsel, 5.4) Positionierung der Portkapsel im Pouch, 5.5) Chirurgische Naht, 5.6) Punktion der Portkapsel
+- Phase 6: Katheterkontrolle. Schritte: 6.1) Röntgenmaschine fährt ein, 6.2) Digitale Subtraktionsangiographie des Brust 6.3) Röntgenmaschine fährt in Parkposition aus
 - Phase 7: Abschluss. Schritte: 7.1) Steriles Pflaster auflegen, 7.2) Tisch fährt nach unten
 * Daten: Du erhältst einen Datensatz mit fehlenden Unterhaltungen im Abschnitt <Daten 1>. Die Daten enthalten einen Index, die Startzeit der Rede, den gesprochenen Satz eines Chirurgen und eine Bezeichnung für die Operationsphase.
-* Aufgabe: Verwende die Vorlage in Abschnitt <Antwort 1> und beantwort die Fragen."""
+* Aufgabe: Verwende die Vorlage in Abschnitt <Antwort 1> und beantwort die Fragen. Noch keine Sätze generieren, um fehlende Daten zu ergänzen."""
                 prompt += f"\n<Daten 1>\n{sub_print_df.to_csv(index=True, sep=';', index_label='Index')}</Daten 1>\n"
                 prompt += """
 <Antwort 1> 
 1.Welche chirurgische Phase enthalten die gegebenen Daten?
 2.Welche chirurgischen Schritte enthält diese Phase?
 3.Welche chirurgischen Schritte wurden abgeschlossen?
-4.Welche chirurgischen Schritte verbleiben in der Phase?
+4.Falls vorhanden, welche chirurgischen Schritte sind in dieser Phase noch nicht abgeschlossen?
 </Antwort 1>
 """             
                 # Generate Answer 1.1
-                messages = [{"role": "user", "content": role + prompt}]
-                messages, answer = get_answer(language_model, tokenizer, messages, max_new_tokens=400) 
+                messages = [{"role": "system", "content": role}]
+                messages.append({"role": "user", "content":prompt})
+                answer = get_answer(tokenizer, language_model, messages, max_new_tokens=1500)
+                
+                # Add to chat
+                block_answer = get_tagged_block(answer, '<Antwort 1>', '</Antwort 1>')
+                messages.append({"role": "assistant", "content": '\n'.join(block_answer)+'\n'})
                 
                 ####################################### Step 1.2 #######################################
                 prompt = """\nDu wirst die fehlenden Konversationen im Abschnitt <Daten 2> ergänzen, indem du generierte chirurgische Phasen und Schritte berücksichtigst.
@@ -581,13 +566,13 @@ def gen_data(language_model, tokenizer, pocap):
 
                 # Generate Answer 1.2
                 messages.append({"role": "user", "content": prompt})
-                messages, answer = get_answer(language_model, tokenizer, messages, max_new_tokens=max_new_tokens) 
-
+                answer = get_answer(tokenizer, language_model, messages, max_new_tokens=max_new_tokens)
+                
                 # Extract tagged block
                 block_answer = get_tagged_block(answer, '<Antwort 2>', '</Antwort 2>')
-
-                # Remove Aufgabe 1
-                block_answer = block_answer
+                
+                # Add to chat history
+                messages.append({"role": "assistant", "content": '\n'.join(block_answer) + '\n'})
 
                 # Check line shapes/errors
                 block_answer = line_errors(block_answer, len(sub_df))
@@ -626,17 +611,15 @@ def gen_data(language_model, tokenizer, pocap):
     df_empty_rows['Text'] = df_empty_rows['Text'].str.replace('"""', '')
     df_sample.loc[df_empty_rows.index, 'Text'] = df_empty_rows['Text']
     assert np.prod(steps_complete) == 1, "Not all steps completed"
-    
+
     ####################################### Step 2 #######################################
     #Variables
     limit_try = 3
     dfs_to_concat = []
-    tokens_per_row = 50
-    max_token_generation = 500
-    num_sub_dfs = tokens_per_row*len(df_sample) // max_token_generation + 1
+    tokens_per_row = 60
     
     # Sliding Window
-    df_splits = df_splitter(df_sample, num_sub_dfs)
+    df_splits = df_splitter(df_sample)
     steps_complete = np.zeros(len(df_splits))
     
     for i, sub_df in enumerate(df_splits):
@@ -644,7 +627,7 @@ def gen_data(language_model, tokenizer, pocap):
         sub_df = sub_df[['Start_Zeit', 'Phase_Bezeichnung', 'Text']]
         max_new_tokens = tokens_per_row*len(sub_df)
         
-        # Try limit_try times, if Gemma cant follow instructions
+        # Try limit_try times, if LM cant follow instructions
         n_try = 0
         while n_try < limit_try:
             try:
@@ -660,11 +643,15 @@ def gen_data(language_model, tokenizer, pocap):
                 prompt += f"\n<Antwort 2>\n{sub_df.to_csv(index=True, sep=';', index_label='Index')}</Antwort 2>\n"
 
                 # Generate Answer 2
-                messages = [{"role": "user", "content": role + prompt}]
-                messages, answer = get_answer(language_model, tokenizer, messages, max_new_tokens=max_new_tokens)
+                messages = [{"role": "system", "content": role}]
+                messages.append({"role": "user", "content":prompt})
+                answer = get_answer(tokenizer, language_model, messages, max_new_tokens=max_new_tokens)
                 
                 # Extract tagged block
                 block_answer = get_tagged_block(answer, '<Antwort 2>', '</Antwort 2>')
+                
+                # Add to chat history
+                messages.append({"role": "assistant", "content": '\n'.join(block_answer) + '\n'})
 
                 # Check line shapes/errors
                 block_answer = line_errors(block_answer, len(sub_df))
@@ -755,7 +742,7 @@ if __name__ == "__main__":
     error_count = 0
     error_patience = 5
     prefix_idx = args.prefix_index
-    model_id = 'google/gemma-2-27b-it'
+    model_id = 'mistralai/Mistral-Large-Instruct-2407'
     end_idx = prefix_idx + args.num_target - 1
     
     # Login huggingface environment
@@ -763,12 +750,11 @@ if __name__ == "__main__":
     huggingface_hub.login(os.getenv('HF_TOKEN'), add_to_git_credential=False)
     
     # Model
-    gemma2_tokenizer = AutoTokenizer.from_pretrained(model_id, cache_dir=os.getenv('HF_CACHE_DIR'))
-    gemma2 = AutoModelForCausalLM.from_pretrained(
+    auto_tokenizer = AutoTokenizer.from_pretrained(model_id, cache_dir=os.getenv('HF_CACHE_DIR'))
+    auto_language_model = AutoModelForCausalLM.from_pretrained(
         model_id,
         device_map='auto',
         torch_dtype=torch.bfloat16,
-        attn_implementation='eager',
         cache_dir=os.getenv('HF_CACHE_DIR')
     )
 
@@ -798,8 +784,8 @@ if __name__ == "__main__":
             # generate data
             generation_start = time.time()
             df, chat_container = gen_data(
-                language_model=gemma2, 
-                tokenizer=gemma2_tokenizer,
+                tokenizer=auto_tokenizer,
+                language_model=auto_language_model, 
                 pocap=pocap 
             )
 
