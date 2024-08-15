@@ -27,32 +27,45 @@ if DEBUG_MODE:
 ####################################### Functions, Classes #######################################
 class PoCaPCorpus():
     def __init__(self, seedset, target_path):
+        self.seedset = seedset
+        print('Seedset', seedset)
         self.target_path = target_path
-        self.dataset = seedset
+        self.index = -1
+        
         self.count_corpus()
         self.compute_quantiles()
+        if len(os.listdir(target_path)) == 0: self.seed_target_dir()
+        self.dataset = listdir(self.target_path, '.csv')
+        print('Dataset Len: ', len(self.dataset))
     
     def count_corpus(self):
-            self.phase_count = np.zeros((len(self.dataset), 8))
-            self.percentage_count = np.zeros((len(self.dataset), 8))
+            self.phase_count = np.zeros((len(self.seedset), 8))
+            self.percentage_count = np.zeros((len(self.seedset), 8))
             
-            for i, d in enumerate(self.dataset):
+            for i, s in enumerate(self.seedset):
                 array_count = np.zeros(8, dtype=int)
-                df = pd.read_csv(d)
+                df = pd.read_csv(s)
                 phases = df['Phase_Label'].value_counts().drop(8, errors='ignore')
                 array_count[phases.index] = phases.values
                 self.phase_count[i, :] = array_count
                 self.percentage_count[i, :] = array_count / np.sum(array_count)
     
+    def seed_target_dir(self):
+        for s  in self.seedset:
+            df = pd.read_csv(s, index_col=0)
+            df['Heritage'] = 1
+            df.to_csv(os.path.join(self.target_path, s.split('/')[-1]))
+            
     def get_sample_data(self):
-        return np.random.choice(self.dataset)
+        return self.dataset[(self.index-len(self.dataset))%len(self.dataset)]
     
-    def update_dataset(self):
-        new_files = [os.path.join(self.target_path, gen) 
-                    for gen in os.listdir(self.target_path) 
-                    if gen.endswith('.csv') and os.path.join(self.target_path, gen) not in self.dataset]
-        if len(new_files) != 0:
-            self.dataset.extend(new_files)
+    def add_to_dataset(self, data):
+        self.dataset[(self.index-len(self.dataset))%len(self.dataset)] = data
+        self.index += 1
+    
+    def next_sample(self):
+        self.seed_index += 1
+        return self.dataset[self.seed_index]
         
     def compute_quantiles(self):
         self.lower_quantile_phase = np.quantile(self.phase_count, 0.25, axis=0)
@@ -76,6 +89,7 @@ class PoCaPCorpus():
             
     def plot_violin(self):
         # update counts
+        self.dataset = listdir(self.target_path, '.csv')
         phase_count = np.zeros((len(self.dataset), 8), dtype=int)
         percentage_count = np.zeros((len(self.dataset), 8))
         
@@ -342,7 +356,9 @@ def drop_and_add(df, pocap):
         if count[phase] - to_drop[phase] > 1:
             phase_indices = df[df['Phase_Bezeichnung'] == phase].index
             if len(phase_indices) >= to_drop[phase]:
-                drop_indices = np.random.choice(phase_indices, to_drop[phase], replace=False)
+                heritage_scores = df.loc[phase_indices, 'Heritage']
+                prob = heritage_scores / heritage_scores.sum()
+                drop_indices = np.random.choice(phase_indices, size=int(to_drop[phase]), replace=False, p=prob)
                 df = df.drop(drop_indices)
     
     # Add lines
@@ -353,7 +369,8 @@ def drop_and_add(df, pocap):
             empty_row = pd.DataFrame({
                 'Start_Zeit': [np.nan],
                 'Text': [fill_tag],
-                'Phase_Bezeichnung': [np.nan]
+                'Phase_Bezeichnung': [np.nan],
+                'Heritage': [0]
             })
             
             if len(phase_df) == 1:
@@ -410,6 +427,10 @@ def drop_and_add(df, pocap):
                 df.at[phase_df.index[0], 'Start_Zeit'] = start_time
     
     df['Start_Zeit'] = df['Start_Zeit'].astype(float).round(3)
+    
+    # Increment heritage count
+    df['Heritage'] = df['Heritage'].apply(pd.to_numeric)
+    df['Heritage'] = df['Heritage'] + 1
     
     # Copy also empty datatframe
     df_to_fill = df.copy()
@@ -502,6 +523,8 @@ def gen_data(tokenizer, language_model, pocap):
     df_sample = pd.read_csv(sample_data, index_col=0)
     df_sample = df_sample.rename(columns={'Start_Time': 'Start_Zeit', 'Phase_Label': 'Phase_Bezeichnung'})
     df_sample, df_to_fill = drop_and_add(df_sample, pocap)
+    heritage = df_sample['Heritage'].tolist()
+    df_sample = df_sample.drop(columns=['Heritage'])
     df_to_print = df_sample.copy()
     
     df_to_print.drop(columns=['Start_Zeit'], inplace=True)
@@ -707,6 +730,7 @@ def gen_data(tokenizer, language_model, pocap):
         'Phase_Bezeichnung': 'Phase_Label'
     })
     result_df['Text'] = result_df['Text'].str.strip()
+    result_df['Heritage'] = heritage
     
     # Remove log files
     if DEBUG_MODE:
@@ -770,11 +794,6 @@ if __name__ == "__main__":
     
     # PoCaP 
     pocap = PoCaPCorpus(seedset=seedset, target_path=args.target_path)
-    print(f"The seedset: {pocap.dataset}")
-    
-    # If exists, add synthetic data to pool
-    pocap.update_dataset()
-    print(f"Length of dataset: {len(pocap.dataset)}")
 
     # Generate Data
     while prefix_idx <= end_idx and error_count < error_patience:
@@ -793,7 +812,7 @@ if __name__ == "__main__":
 
             # save & update
             df.to_csv(save_name)
-            pocap.update_dataset()
+            pocap.add_to_dataset(save_name)
             
             # save log
             with open(save_name[:-4] + ".txt", "w") as f:
