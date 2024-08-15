@@ -157,28 +157,18 @@ class SLPNet(nn.Module):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
         self.embed_in = nn.Sequential(
-            nn.Conv1d(
-                in_channels=1024,
-                out_channels=model_dim, 
-                kernel_size=1
-            ),
+            nn.Conv1d(in_channels=1024, out_channels=model_dim, kernel_size=1),
             nn.BatchNorm1d(model_dim)
         )
         
-        encoder_stack = OrderedDict()
-        for n in range(num_encoder):
-            encoder_stack[f'Encoder{n}'] = SLPEncoder(
-                model_dim, 
-                num_head, 
-                dropout_prob=dropout_prob
-            )
-        self.encoder = nn.Sequential(encoder_stack)
+        self.encoder = nn.Sequential(OrderedDict(
+            (f'Encoder{n}', SLPEncoder(model_dim, num_head, dropout_prob=dropout_prob)) 
+            for n in range(num_encoder)
+        ))
         
-        self.classfier = nn.Linear(
-            in_features=model_dim,
-            out_features=num_classes
-        )
-    
+        self.classifier = nn.Linear(in_features=model_dim, out_features=num_classes)
+        self.mem = torch.zeros(1, device=self.device)
+
     def positional_encoding(self, idx):
         pe = torch.zeros((self.model_dim, idx.shape[0])).to(self.device)
         position = torch.arange(0, self.model_dim, dtype=torch.float).unsqueeze(1).to(self.device)
@@ -189,14 +179,25 @@ class SLPNet(nn.Module):
 
         return pe.T
       
+    def last_phase(self, x, last_n=5):
+        last_n = min(x.shape[0]-1, last_n)
+        p = torch.argmax(x[:-last_n, :], dim=1)
+        return torch.mode(p, 0).values
+      
     def forward(self, x, t):
-        t = self.positional_encoding(t) # (B, model_dim)
-        t = t.unsqueeze(-1) # (B, model_dim, L)
-        x = self.embed_in(x) # (B, 1024, L) -> (B, model_dim, L)
-        x = x + t # (B, model_dim, L)
-        x = self.encoder(torch.transpose(x, 1, 2)) # -> (B, L, model_dim)
-        x = self.classfier(x) # -> (B, L, num_classes)
-        return x.squeeze() # -> (B, num_classes)
+        t = self.positional_encoding(t).unsqueeze(-1)  # (B, model_dim, L)
+        m = self.positional_encoding(self.mem).unsqueeze(-1)
+        
+        x = self.embed_in(x)  # (B, 1024, L) -> (B, model_dim, L)
+        x = x + t  # (B, model_dim, L)
+        x = torch.cat((x, m), dim=0)  # (B+1, model_dim, L)
+        x = self.encoder(torch.transpose(x, 1, 2))  # -> (B+1, L, model_dim)
+        
+        x = x[:-1, :, :]  # (B, L, model_dim)
+        x = self.classifier(x).squeeze()  # -> (B, num_classes)
+        self.mem[0] = self.last_phase(x.detach())
+        
+        return x
     
     def get_attention_maps(self, x, mask=None):
         attention_maps = []
