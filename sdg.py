@@ -818,6 +818,10 @@ if __name__ == "__main__":
                         type=int, default=0,
                         help='prefix start index of new data')
 
+    parser.add_argument('-s', '--seed_set',
+                        type=int, default=-1,
+                        help='which seedset to use for parallelisation')
+
     args = parser.parse_args()
 
     # Target folder
@@ -847,10 +851,22 @@ if __name__ == "__main__":
 
     # Read reference data
     data_path = 'Transcripts/'
-    seedset = ['OP_005.csv', 'OP_023.csv', 'OP_027.csv', 'OP_040.csv',
-               'OP_035.csv', 'OP_038.csv', 'OP_013.csv', 'OP_009.csv',
-               'OP_011.csv', 'OP_007.csv', 'OP_019.csv', 'OP_002.csv',
-               'OP_039.csv', 'OP_026.csv', 'OP_016.csv']  # 006 -> 500+, 17, 22, 24, 32 --> 230+
+    if args.seed_set == -1:
+        seedset = ['OP_005.csv', 'OP_023.csv', 'OP_027.csv', 'OP_040.csv',
+                   'OP_035.csv', 'OP_038.csv', 'OP_013.csv', 'OP_009.csv',
+                   'OP_011.csv', 'OP_007.csv', 'OP_019.csv', 'OP_002.csv',
+                   'OP_039.csv', 'OP_026.csv', 'OP_016.csv']  # 006 -> 500+, 17, 22, 24, 32 --> 230+
+    elif args.seed_set == 0:
+        seedset = ['OP_005.csv', 'OP_023.csv', 'OP_027.csv', 'OP_040.csv']
+    elif args.seed_set == 1:
+        seedset = ['OP_035.csv', 'OP_038.csv', 'OP_013.csv', 'OP_009.csv']
+    elif args.seed_set == 2:
+        seedset = ['OP_011.csv', 'OP_007.csv', 'OP_019.csv', 'OP_002.csv']
+    elif args.seed_set == 3:
+        seedset = ['OP_039.csv', 'OP_026.csv', 'OP_016.csv']
+    else:
+        raise ValueError(f"Given seed is not correct!")
+
     seedset = sorted([os.path.join('Transcripts/', s) for s in seedset])
 
     # PoCaP
