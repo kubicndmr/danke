@@ -25,74 +25,79 @@ if DEBUG_MODE:
     torch.cuda.manual_seed(1)
 
 ####################################### Functions, Classes #######################################
+
+
 class PoCaPCorpus():
     def __init__(self, seedset, target_path):
         self.seedset = seedset
         print('Seedset', seedset)
         self.target_path = target_path
         self.index = -1
-        
+
         self.count_corpus()
         self.compute_quantiles()
-        if len(os.listdir(target_path)) == 0: self.seed_target_dir()
+        if len(os.listdir(target_path)) == 0:
+            self.seed_target_dir()
         self.dataset = listdir(self.target_path, '.csv')
         print('Dataset Len: ', len(self.dataset))
-    
+
     def count_corpus(self):
-            self.phase_count = np.zeros((len(self.seedset), 8))
-            self.percentage_count = np.zeros((len(self.seedset), 8))
-            
-            for i, s in enumerate(self.seedset):
-                array_count = np.zeros(8, dtype=int)
-                df = pd.read_csv(s)
-                phases = df['Phase_Label'].value_counts().drop(8, errors='ignore')
-                array_count[phases.index] = phases.values
-                self.phase_count[i, :] = array_count
-                self.percentage_count[i, :] = array_count / np.sum(array_count)
-    
+        self.phase_count = np.zeros((len(self.seedset), 8))
+        self.percentage_count = np.zeros((len(self.seedset), 8))
+
+        for i, s in enumerate(self.seedset):
+            array_count = np.zeros(8, dtype=int)
+            df = pd.read_csv(s)
+            phases = df['Phase_Label'].value_counts().drop(8, errors='ignore')
+            array_count[phases.index] = phases.values
+            self.phase_count[i, :] = array_count
+            self.percentage_count[i, :] = array_count / np.sum(array_count)
+
     def seed_target_dir(self):
-        for s  in self.seedset:
+        for s in self.seedset:
             df = pd.read_csv(s, index_col=0)
             df['Heritage'] = 1
             df.to_csv(os.path.join(self.target_path, s.split('/')[-1]))
-            
+
     def get_sample_data(self):
-        return self.dataset[(self.index-len(self.dataset))%len(self.dataset)]
-    
+        return self.dataset[(self.index-len(self.dataset)) % len(self.dataset)]
+
     def add_to_dataset(self, data):
-        self.dataset[(self.index-len(self.dataset))%len(self.dataset)] = data
+        self.dataset[(self.index-len(self.dataset)) % len(self.dataset)] = data
         self.index += 1
-    
+
     def next_sample(self):
         self.seed_index += 1
         return self.dataset[self.seed_index]
-        
+
     def compute_quantiles(self):
         self.lower_quantile_phase = np.quantile(self.phase_count, 0.25, axis=0)
         self.upper_quantile_phase = np.quantile(self.phase_count, 0.75, axis=0)
-        self.lower_quantile_percent = np.quantile(self.percentage_count, 0.25, axis=0)
-        self.upper_quantile_percent = np.quantile(self.percentage_count, 0.75, axis=0)
-    
+        self.lower_quantile_percent = np.quantile(
+            self.percentage_count, 0.25, axis=0)
+        self.upper_quantile_percent = np.quantile(
+            self.percentage_count, 0.75, axis=0)
+
     def sample_d_a(self, phase, percent_count, phase_count):
-        if (percent_count <= self.lower_quantile_percent[phase] or 
-            phase_count <= self.lower_quantile_phase[phase]):
+        if (percent_count <= self.lower_quantile_percent[phase] or
+                phase_count <= self.lower_quantile_phase[phase]):
             d = np.random.uniform(0.1, 0.2)
-            a = np.random.uniform(0.2, 0.3) #106.25
+            a = np.random.uniform(0.2, 0.3)  # 106.25
         elif (percent_count >= self.upper_quantile_percent[phase] or
               phase_count >= self.upper_quantile_phase[phase]):
             d = np.random.uniform(0.2, 0.3)
-            a = np.random.uniform(0.2, 0.3) #93.75
+            a = np.random.uniform(0.2, 0.3)  # 93.75
         else:
             d = np.random.uniform(0.15, 0.25)
-            a = np.random.uniform(0.2, 0.3) #100
+            a = np.random.uniform(0.2, 0.3)  # 100
         return d, a
-            
+
     def plot_violin(self):
         # update counts
         self.dataset = listdir(self.target_path, '.csv')
         phase_count = np.zeros((len(self.dataset), 8), dtype=int)
         percentage_count = np.zeros((len(self.dataset), 8))
-        
+
         for i, d in enumerate(self.dataset):
             array_count = np.zeros(8, dtype=int)
             df = pd.read_csv(d)
@@ -100,14 +105,14 @@ class PoCaPCorpus():
             array_count[phases.index] = phases.values
             phase_count[i, :] = array_count
             percentage_count[i, :] = array_count / np.sum(array_count)
-        
+
         # plot
-        #plt.rcParams["font.family"] = "Times New Roman"
+        # plt.rcParams["font.family"] = "Times New Roman"
         def_cmap = matplotlib.colormaps.get_cmap('tab10')
         color_list = def_cmap(np.linspace(0, 1, 9))
-        
+
         fig, axs = plt.subplots(1, 2, figsize=(20, 9), dpi=75)
-        
+
         '''
         for i in range(0,8):
             data = self.phase_count[:self.index, i]
@@ -115,45 +120,46 @@ class PoCaPCorpus():
         '''
         violins = axs[0].violinplot(
             phase_count,
-            showmeans=False, 
-            showmedians=True, 
+            showmeans=False,
+            showmedians=True,
             showextrema=False
         )
         for j, pc in enumerate(violins['bodies']):
             pc.set_facecolor(color_list[j])
             pc.set_edgecolor('black')
             pc.set_alpha(0.7)
-                 
-        #axs[0].set_ylim(-1, 150)
+
+        # axs[0].set_ylim(-1, 150)
         axs[0].set_ylabel('#Sentences', fontsize=16)
         axs[0].set_xlabel('Surgical Phases', fontsize=16)
         axs[0].tick_params(axis='x', labelsize=14)
         axs[0].tick_params(axis='y', labelsize=14)
-        
+
         violins = axs[1].violinplot(
-            percentage_count, 
-            showmeans=False, 
-            showmedians=True, 
+            percentage_count,
+            showmeans=False,
+            showmedians=True,
             showextrema=False
         )
         for j, pc in enumerate(violins['bodies']):
             pc.set_facecolor(color_list[j])
             pc.set_edgecolor('black')
             pc.set_alpha(0.7)
-        
-        #axs[1].set_ylim(-0.01, 0.6)
+
+        # axs[1].set_ylim(-0.01, 0.6)
         axs[1].set_ylabel('Percentage', fontsize=16)
         axs[1].set_xlabel('Surgical Phases', fontsize=16)
         axs[1].tick_params(axis='x', labelsize=14)
         axs[1].tick_params(axis='y', labelsize=14)
-        fig.savefig(os.path.join(self.target_path, 'clas_dist.png'), bbox_inches='tight')
-        
-        
+        fig.savefig(os.path.join(self.target_path,
+                    'clas_dist.png'), bbox_inches='tight')
+
+
 def prefix(id, name='', buffer=5):
     return name + str(id).zfill(buffer)
 
 
-def get_answer(tokenizer, language_model, messages, max_new_tokens, 
+def get_answer(tokenizer, language_model, messages, max_new_tokens,
                do_sample=True, top_p=0.95, temperature=1, repetition_penalty=1.1):
     """
     Generates a response from the model based on the provided chat history.
@@ -172,18 +178,19 @@ def get_answer(tokenizer, language_model, messages, max_new_tokens,
     response: The generated response from the model.
     """
     # Prepare the prompt from the chat history
-    prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-    
+    prompt = tokenizer.apply_chat_template(
+        messages, tokenize=False, add_generation_prompt=True)
+
     # Encode the prompt to input tensor
     inputs = tokenizer(prompt, return_tensors="pt")
     inputs['input_ids'] = inputs['input_ids'].to(language_model.device)
-    
+
     # Output
     if DEBUG_MODE:
         with open('prompt.txt', 'w') as f:
             f.write(prompt)
             f.write(f"\n\nPrompt has {len(inputs[0])} tokens")
-    
+
     # Generate the model's response
     outputs = language_model.generate(
         **inputs,
@@ -195,17 +202,17 @@ def get_answer(tokenizer, language_model, messages, max_new_tokens,
         temperature=temperature,
         repetition_penalty=repetition_penalty
     )
-        
+
     # Decode the model's output and update the chat history
     response = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    
+
     # Output
     if DEBUG_MODE:
         with open('response.txt', 'w') as f:
             f.write(response)
-    
+
     return response
-    
+
 
 def get_tagged_block(text, start_tag, end_tag):
     """
@@ -240,7 +247,7 @@ def get_tagged_block(text, start_tag, end_tag):
             if line != '':
                 block.append(line)
     return block
- 
+
 
 def block_to_df(block):
     """
@@ -249,19 +256,19 @@ def block_to_df(block):
     Args:
         block   : list 
                     A list of strings where the first item contains column names
-        
+
     Returns:
         df      : pandas.DataFrame
                     A DataFrame of the text
     """
     columns = block[0].split(';')
-    
+
     rows = []
     for line in block[1:]:
         rows.append(line.split(';'))
 
     df = pd.DataFrame(rows, columns=columns)
-    
+
     df[columns[0]] = df[columns[0]].apply(pd.to_numeric)
     df.set_index(columns[0], inplace=True)
 
@@ -297,7 +304,7 @@ def listdir(path, ending=None):
     if ending == None:
         return sorted([os.path.join(path, f) for f in os.listdir(path)])
     else:
-        return sorted([os.path.join(path, f) for f in os.listdir(path) 
+        return sorted([os.path.join(path, f) for f in os.listdir(path)
                        if f.endswith(ending)])
 
 
@@ -306,15 +313,15 @@ def drop_and_add(df, pocap):
     This functions drops randomly selected rows from given dataframe,
     and adds empty rows in 'Text' column with '"Ausfüllen"' tag on randomly 
     selected positions. Randomness is controlled by p values.
-    
+
     Parameters:
     df              : DataFrame
                         DataFrame with transcriptions, time and phase labels
-    
+
     qtile_low       : np.array
                         0.25 percent quantile of phases computed from the
                         dataset
-     
+
     qtile_high      : np.array
                         0.75 percent quantile of phases computed from the
                         dataset   
@@ -325,18 +332,18 @@ def drop_and_add(df, pocap):
                         DataFrame with only empty rows.
     '''
     fill_tag = '*fehlende Daten*'
-    
+
     # Remove unrelated parts
     df = df.drop(columns=['File_Name', 'End_Time'], errors='ignore')
     df = df[df['Text'] != '<nicht verstanden>']
     df = df[~df['Phase_Bezeichnung'].isin([8, '8'])]
-    
+
     # Get phase distribution of given data
     count = np.zeros(8, dtype=int)
     phases = df['Phase_Bezeichnung'].value_counts()
     count[phases.index] = phases.values
     percentage = count / np.sum(count)
-    
+
     # Find number of lines to drop and add
     to_add = np.zeros(len(count), dtype=int)
     to_drop = np.zeros(len(count), dtype=int)
@@ -350,7 +357,7 @@ def drop_and_add(df, pocap):
             d, a = pocap.sample_d_a(i, p, c)
             to_drop[i] = np.ceil(c * d)
             to_add[i] = np.ceil(c * a)
-    
+
     # Drop lines
     for phase in range(len(to_drop)):
         if count[phase] - to_drop[phase] > 1:
@@ -358,9 +365,10 @@ def drop_and_add(df, pocap):
             if len(phase_indices) >= to_drop[phase]:
                 heritage_scores = df.loc[phase_indices, 'Heritage']
                 prob = heritage_scores / heritage_scores.sum()
-                drop_indices = np.random.choice(phase_indices, size=int(to_drop[phase]), replace=False, p=prob)
+                drop_indices = np.random.choice(phase_indices, size=int(
+                    to_drop[phase]), replace=False, p=prob)
                 df = df.drop(drop_indices)
-    
+
     # Add lines
     phase_dfs = []
     for phase in range(len(to_add)):
@@ -372,91 +380,98 @@ def drop_and_add(df, pocap):
                 'Phase_Bezeichnung': [np.nan],
                 'Heritage': [0]
             })
-            
+
             if len(phase_df) == 1:
-                phase_df = pd.concat([phase_df, empty_row]).reset_index(drop=True)
+                phase_df = pd.concat([phase_df, empty_row]
+                                     ).reset_index(drop=True)
             else:
-                idx = np.random.randint(1,len(phase_df))
-                phase_df = pd.concat([phase_df.iloc[:idx], empty_row, phase_df.iloc[idx:]]).reset_index(drop=True)
-                
+                idx = np.random.randint(1, len(phase_df))
+                phase_df = pd.concat(
+                    [phase_df.iloc[:idx], empty_row, phase_df.iloc[idx:]]).reset_index(drop=True)
+
         phase_dfs.append(phase_df)
 
     # Concat
     df = pd.concat(phase_dfs).reset_index(drop=True)
-    
+
     # Fill the phase label column
-    df['Phase_Bezeichnung'] = df['Phase_Bezeichnung'].apply(pd.to_numeric).ffill().astype(int)
-    
+    df['Phase_Bezeichnung'] = df['Phase_Bezeichnung'].apply(
+        pd.to_numeric).ffill().astype(int)
+
     # Update the time column with randomly generated values
     df['Start_Zeit'] = df['Start_Zeit'].apply(pd.to_numeric).ffill()
-    
+
     relaxation = 0.01
     last_phase_end = 0
-    
+
     for phase in df['Phase_Bezeichnung'].unique():
-        
+
         phase_df = df[df['Phase_Bezeichnung'] == phase].copy()
-        
+
         start_time = phase_df['Start_Zeit'].iloc[0]
         end_time = phase_df['Start_Zeit'].iloc[-1]
-        
+
         if last_phase_end == 0:
-            start_time = np.random.uniform(start_time*(1-relaxation), start_time*(1+relaxation), 1)[0]
+            start_time = np.random.uniform(
+                start_time*(1-relaxation), start_time*(1+relaxation), 1)[0]
         else:
             if start_time > last_phase_end:
-                start_time = np.random.uniform(last_phase_end, start_time*(1+relaxation), 1)[0]
+                start_time = np.random.uniform(
+                    last_phase_end, start_time*(1+relaxation), 1)[0]
             else:
-                start_time = np.random.uniform(last_phase_end, last_phase_end*(1+relaxation), 1)[0]
-        
-        
-        end_time = np.random.uniform(end_time*(1-relaxation), end_time*(1+relaxation), 1)[0]
+                start_time = np.random.uniform(
+                    last_phase_end, last_phase_end*(1+relaxation), 1)[0]
+
+        end_time = np.random.uniform(
+            end_time*(1-relaxation), end_time*(1+relaxation), 1)[0]
         last_phase_end = end_time
-        
+
         if len(phase_df) > 2:
-            random_times = sorted(np.random.uniform(start_time + 1, end_time, len(phase_df) - 2))
+            random_times = sorted(np.random.uniform(
+                start_time + 1, end_time, len(phase_df) - 2))
             random_times = [start_time] + list(random_times) + [end_time]
-            
+
             for i, new_time in zip(phase_df.index, random_times):
                 df.at[i, 'Start_Zeit'] = new_time
-        
+
         else:
             if len(phase_df) == 2:
                 df.at[phase_df.index[0], 'Start_Zeit'] = start_time
                 df.at[phase_df.index[1], 'Start_Zeit'] = end_time
             elif len(phase_df) == 1:
                 df.at[phase_df.index[0], 'Start_Zeit'] = start_time
-    
+
     df['Start_Zeit'] = df['Start_Zeit'].astype(float).round(3)
-    
+
     # Increment heritage count
     df['Heritage'] = df['Heritage'].apply(pd.to_numeric)
     df['Heritage'] = df['Heritage'] + 1
-    
+
     # Copy also empty datatframe
     df_to_fill = df.copy()
     df_to_fill = df_to_fill[df_to_fill['Text'] == fill_tag]
-    
+
     return df, df_to_fill
 
 
 def merge_small_groups(groups, min_size=6):
-        merged_groups = []
-        current_group = groups[0]
+    merged_groups = []
+    current_group = groups[0]
 
-        for next_group in groups[1:]:
-            if len(current_group) < min_size:
-                current_group = pd.concat([current_group, next_group])
-            else:
-                merged_groups.append(current_group)
-                current_group = next_group
-
-        # Add the last group
-        if len(current_group) < min_size and merged_groups:
-            merged_groups[-1] = pd.concat([merged_groups[-1], current_group])
+    for next_group in groups[1:]:
+        if len(current_group) < min_size:
+            current_group = pd.concat([current_group, next_group])
         else:
             merged_groups.append(current_group)
-        
-        return merged_groups
+            current_group = next_group
+
+    # Add the last group
+    if len(current_group) < min_size and merged_groups:
+        merged_groups[-1] = pd.concat([merged_groups[-1], current_group])
+    else:
+        merged_groups.append(current_group)
+
+    return merged_groups
 
 
 def df_splitter(df, max_df_length=20):
@@ -469,86 +484,103 @@ def df_splitter(df, max_df_length=20):
             num_split = int(np.ceil(len(split_df) / max_df_length))
             sub_dfs = np.array_split(split_df, num_split)
             split_dfs.extend(sub_dfs)
-    
+
     return merge_small_groups(split_dfs)
 
 
 def check_format(block, columns, generation_tag='*Ausfüllen*'):
     # Check column names
     columns_flag = block[0].split(';') == columns
-    
+
     # Check row entries
     rows_flag = 1
     for row in block[1:]:
         length = len(row.split(';')) == len(columns)
         generation = not (generation_tag in row)
         empty = np.prod([item != '' for item in row.split(';')])
-        rows_flag *= (length * generation * empty)       
-          
+        rows_flag *= (length * generation * empty)
+
     return columns_flag * rows_flag
-        
+
 
 def gen_data(tokenizer, language_model, pocap):
     '''
     Generates synthetic data
-                        
+
     language_model  : transformers.AutoModelForCausalLM
                         Gemma-2 model
-                    
+
     tokenizer       : transformers.AutoTokenizer
                         Gemma-2 tokenizer
-                        
+
     sample_data     : DataFrame
                         Example surgical operation transcript
     '''
     # Get sample data
     sample_data = pocap.get_sample_data()
-    chat_container = [{'role':'sample', 'content':sample_data}]
-    
+    chat_container = [{'role': 'sample', 'content': sample_data}]
+
+    # Dictionaries
     label_dic = {
         0: 'Vorbereitung', 1: 'Punktion', 2: 'Führungsdraht',
         3: 'Pouchvorbereitung-und-Katheterplatzierung', 4: 'Katheterpositionierung', 5: 'Katheteranpassung',
         6: 'Katheterkontrolle', 7: 'Abschluss'
     }
-    
+
+    cluster_prompt = {
+        'Vorbereitung': '''In der Phase Vorbereitung: fünf Aussagen ähnlich wie 1)"Nicht hinlangen, keine Angst, ich mache es gleich so, dass Sie wieder rausschauen." 2) "Ich decke sie mal ein bisschen zu, aber ich mache es sofort wieder weg." 3) "Ich gehe mal kurz über die Augen, deswegen Augen mal kurz zumachen." und fünf Aussagen wie 1) "Nimm mal das sterile Tuch." 2) "Ich deck sie gleich mit so einem OP-Tuch ab." 3) "Wir machen jetzt schon mal ein steriles Tuch bei Ihnen." geäußert.''',
+        'Punktion': '''In der Phase Punktion: 35 Aussagen ähnlich wie 1) "Bitte pressen Sie kräftig in den Bauch, als ob Sie auf die Toilette müssten.", 2) "Nochmal kräftig in den Bauch reinpressen, bitte." 3)"Einatmen, ausatmen und dann kräftig in den Bauch pressen." und sieben Aussagen ähnlich wie 1) "Bitte atmen Sie tief ein." 2)"Halten Sie die Luft an." 3) "Atmen Sie langsam weiter." geäußert.''',
+        'Führungsdraht': '''In der Phase Führungsdraht: sieben Aussagen ähnlich wie 1) "Bitte blenden Sie oben und unten auf." 2) "Blenden Sie links und rechts ein." 3) "Blenden Sie oben, unten, links und rechts ein.", vier Aussagen ähnlich wie 1) "Wir haben den schwierigen Schritt geschafft und sind in die Vene gekommen." 2) "Wir sind bereits in der Vene, das hat super geklappt." 3) "Den schwierigen Schritt haben wir geschafft, jetzt wird es noch ein bisschen pieksen." geäußert.''',
+        'Pouchvorbereitung-und-Katheterplatzierung': '''In der Phase Pouchvorbereitung-und-Katheterplatzierung: 23 Aussagen wie 1) "Jetzt wird die lokale Betäubung verabreicht." 2) "Wir warten, bis die Betäubung wirkt." 3) "Die Betäubung wirkt gut bei Ihnen." geäußert.''',
+        'Katheterpositionierung': ''' In der Phase Katheterpositionierung: fünf Aussagen wie 1) "Bitte atmen Sie tief ein." 2) "Atmen Sie ganz tief ein und halten Sie die Luft an." 3) "Jetzt bitte tief einatmen.", vier Aussagen wie 1) "Der Portschlauch ist jetzt platziert, nun verbinden wir ihn mit der Katheter. 2) "Wir verbinden den Schlauch mit der Kammer." 3) "Wir stellen jetzt die Länge des Portschlauchs ein.", drei Aussagen wie 1) "Wir warten kurz, bis die Blutstillung abgeschlossen ist." 2) "Wir lassen es kurz ruhen, damit es nicht blutet." 3) "Wir warten, bis die Tasche hier bis ins Blut raufkönnt." geäußert.''',
+        'Katheteranpassung': '''In der Phase Katheteranpassung: 43 Aussagen wie 1) "Bitte atmen Sie tief ein und halten Sie die Luft an." 2) "Atmen Sie ganz tief aus und pressen Sie alles raus." 3) "Atmen Sie ruhig und halten Sie die Luft an, wenn ich es sage." geäußert.''',
+        'Katheterkontrolle': '''In der Phase Katheterkontrolle 21 Aussagen wie 1) "Bitte atmen Sie tief ein und halten Sie die Luft an." 2) "Halten Sie die Luft an und bewegen Sie sich nicht." 3) "Sie bekommen gleich ein Atemkommando, bitte atmen Sie tief ein und halten Sie die Luft an." geäußert.''',
+        'Abschluss': '''In der Phase Abschluss: neun Aussagen wie 1) "Wir kleben jetzt ein Pflaster darauf." 2) "Das Pflaster kann später einfach abgezogen werden." 3) "Sie bekommen ein Ersatzpflaster mit." geäußert.'''
+    }
+
     ####################################### Step 1 #######################################
     # Variables
     limit_try = 3
     tokens_per_row = 100
-    
+
     # System Prompt
     role = """Du bist ein hilfsbereites Assistent, das die Chirurgen mit der Hilfe der Beispieldaten nachahmt. Die Aufgabe ist es, künstliche Gespräche eines Chirurgen mit dem medizinischen Assistenten und dem Patienten während einer Port-Katheter-Platzierung Operation zu generieren. Die neu generierten Daten werden für das Training eines textbasierten Deep-Learning-Modells verwendet, das entwickelt wurde, um die chirurgischen Phasen der Port-Katheter-Placement-Operation zu erkennen."""
-    
+
     # Prepare Data
     df_sample = pd.read_csv(sample_data, index_col=0)
-    df_sample = df_sample.rename(columns={'Start_Time': 'Start_Zeit', 'Phase_Label': 'Phase_Bezeichnung'})
+    df_sample = df_sample.rename(
+        columns={'Start_Time': 'Start_Zeit', 'Phase_Label': 'Phase_Bezeichnung'})
     df_sample, df_to_fill = drop_and_add(df_sample, pocap)
     heritage = df_sample['Heritage'].tolist()
     df_sample = df_sample.drop(columns=['Heritage'])
     df_to_print = df_sample.copy()
-    
+
     df_to_print.drop(columns=['Start_Zeit'], inplace=True)
-    df_to_print['Phase_Bezeichnung'] = df_to_print['Phase_Bezeichnung'].map(label_dic)
-    
+    df_to_print['Phase_Bezeichnung'] = df_to_print['Phase_Bezeichnung'].map(
+        label_dic)
+
     # Sliding window
     dfs_to_concat = []
     df_splits = df_splitter(df_to_fill)
     steps_complete = np.zeros(len(df_splits))
-    
+
     for i, sub_df in enumerate(df_splits):
         max_new_tokens = tokens_per_row*len(sub_df)
-        sub_df['Phase_Bezeichnung'] = sub_df['Phase_Bezeichnung'].map(label_dic)
-        
+        sub_df['Phase_Bezeichnung'] = sub_df['Phase_Bezeichnung'].map(
+            label_dic)
+
         # Try limit_try times, if LM cant follow instructions
         n_try = 0
         while n_try < limit_try:
             try:
                 if PRINT_MODE:
-                    print(f'\tStep 1: {int(i+1)}/{len(df_splits)} max new tokens: {max_new_tokens}')
+                    print(
+                        f'\tStep 1: {int(i+1)}/{len(df_splits)} max new tokens: {max_new_tokens}')
                 ####################################### Step 1.1 #######################################
                 which_phase = sub_df['Phase_Bezeichnung'].unique()
-                sub_print_df = df_to_print[df_to_print['Phase_Bezeichnung'].isin(which_phase)]
-                
+                sub_print_df = df_to_print[df_to_print['Phase_Bezeichnung'].isin(
+                    which_phase)]
+
                 prompt = """Du wirst die chirurgischen Phasen und Schritte einer Operation festlegen.
 * Operation: Chirurgische Phasen und chirurgische Schritte darstellen eine typische Operation. Die Phasen beziehen sich auf die großen Abschnitte des Verfahrens, in denen die wichtigsten Schritte beschrieben werden. Chirurgische Schritte sind die spezifischen Aufgaben, die innerhalb jeder Phase ausgeführt werden sollen. Operationen folgen im Allgemeinen dieser Reihenfolge der Ereignisse, mit Ausnahmen. Die Phasen und Schritte der Port-Katheter-Platzierung Operation sind folgendes:
 - Phase 0: Vorbereitung. Schritte: 0.1) Positionierung des Patienten auf dem Tisch 0.2) Tisch fährt hoch 0.3) Radiologe sterilisiert sich 0.4) Vorbereitung des sterilen Materials 0.5) Patient steril abgedeckt
@@ -569,68 +601,84 @@ def gen_data(tokenizer, language_model, pocap):
 3.Welche chirurgischen Schritte wurden abgeschlossen?
 4.Falls vorhanden, welche chirurgischen Schritte sind in dieser Phase noch nicht abgeschlossen?
 </Antwort 1>
-"""             
+"""
                 # Generate Answer 1.1
                 messages = [{"role": "system", "content": role}]
-                messages.append({"role": "user", "content":prompt})
-                answer = get_answer(tokenizer, language_model, messages, max_new_tokens=1500)
-                
+                messages.append({"role": "user", "content": prompt})
+                answer = get_answer(tokenizer, language_model,
+                                    messages, max_new_tokens=1500)
+
                 # Add to chat
-                block_answer = get_tagged_block(answer, '<Antwort 1>', '</Antwort 1>')
-                messages.append({"role": "assistant", "content": '\n'.join(block_answer)+'\n'})
-                
+                block_answer = get_tagged_block(
+                    answer, '<Antwort 1>', '</Antwort 1>')
+                messages.append(
+                    {"role": "assistant", "content": '\n'.join(block_answer)+'\n'})
+                    
                 ####################################### Step 1.2 #######################################
                 prompt = """\nDu wirst die fehlenden Konversationen im Abschnitt <Daten 2> ergänzen, indem du chirurgische Phasen und Schritte berücksichtigst.
 * Daten: Du erhältst eine Analyse der chirurgischen Phasen und Schritte in deiner vorherigen Antwort und einen Datensatz mit fehlenden Unterhaltungen im Abschnitt <Daten 2>. Der Datensatz enthalt einen Index, die Startzeit der Rede, den gesprochenen Satz eines Chirurgen und eine Bezeichnung für die Operationsphase.
-* Aufgabe: Deine Aufgabe ist es, die Zeilen in der Spalte 'Text' und 'Schritte_Bezeichnung', die mit '"Ausfüllen"' markiert sind, zu ergänzen. Die Spalte Schritt_Bezeichnung zeigt an, welcher chirurgische Schritt in dieser Datenzeile läuft, und die Spalte Text zeigt das Gespräch des Chirurgen mit dem Arzthelfer oder dem Patienten im Operationssaal.
-* Strategie: Verwenden Sie die Analyse aus Ihrer vorherigen Antwort und gib zunächst in der Spalte 'Schritt_Bezeichnung' den laufenden Operationsschritt an. Berücksichtig, welche chirurgischen Phasen oder Schritte wurden abgeschlossen, oder durchgeführt werden. Dann erzeuge entsprechende Sätze für diesen Schritt in der Spalte 'Text'.
-* Stil: Erstelle die neue Sätze in einem konsistenten Stil mit den unten angegebenen Daten. Stell dich sicher, dass die Nachbarsätzen anknüpfen, wobei der Kontext erhalten bleibt. Wenn du als Chirurg eine Hilfe bei der Durchführung dieser Schritte benötigst, z. B. um das Röntgengerät an den richtigen Ort zu fahren, frage an die Assistentin. Wenn notwendige verfahrensbezogene Gespräche bereits abgeschlossen sind, aber noch Textzeilen auszufüllen sind, führ ein tägliches Gespräch mit dem Patienten, um ihn zu beruhigen.
+* Aufgabe: Deine Aufgabe ist es, die Zeilen in der Spalte 'Schritte_Bezeichnung' und 'Text', die mit '"Ausfüllen"' markiert sind, zu ergänzen. Die Spalte Schritt_Bezeichnung zeigt an, welcher chirurgische Schritt in dieser Datenzeile läuft, und die Spalte Text zeigt das Gespräch des Chirurgen mit dem Arzthelfer oder dem Patienten im Operationssaal.
+* Strategie: Verwende die Analyse aus Ihrer vorherigen Antwort und gib zunächst in der Spalte 'Schritt_Bezeichnung' den laufenden Operationsschritt an. Berücksichtig, welche chirurgischen Phasen oder Schritte wurden abgeschlossen, oder durchgeführt werden. Dann erzeuge entsprechende Sätze für diesen Schritt in der Spalte 'Text'.
+* Phrasen: Um einen besseren Kontext für den gesamten Datensatz zu schaffen, werden Sätze mit ähnlichen Phrasen über alle Operationen hinweg in Clustern zusammengefasst. Auf diese Weise kannst du die wiederkehrenden Phrasen beobachten, die von Chirurgen während jeder chirurgischen Phase verwendet werden. Dann kannst du neue Sätze auf der Grundlage dieser Sätze erstellen. Phrasen in dieser Phase:\n"""
+                for phase in which_phase:
+                    prompt += cluster_prompt[phase]
+                prompt += """
+* Stil: Erstelle die neue Sätze in einem konsistenten Stil mit den unten angegebenen Daten. Stell dich sicher, dass die Nachbarsätzen anknüpfen, wobei der Kontext erhalten bleibt. Wenn du als Chirurg eine Hilfe bei der Durchführung dieser Schritte benötigst, z. B. um das Röntgengerät an den richtigen Ort zu fahren, frage an die Assistentin. Wenn notwendige verfahrensbezogene Gespräche bereits abgeschlossen sind, aber noch Textzeilen auszufüllen sind, führ ein tägliches Gespräch mit dem Patienten.
 * Format: Gib deine anwort nur auf Deutsch und im Abschnitt < Antwort 2>. Antwort im CSV-Format wie in der Vorlage <Antwort 2> und verwende immer die Tags <Antwort 2> und </Antwort 2> am Anfang und Ende deiner Antwort."""
                 prompt += f"\n<Daten 2>\n{sub_print_df.to_csv(index=True, sep=';', index_label='Index')}</Daten 2>\n"
                 sub_df['Schritt_Bezeichnung'] = "*Ausfüllen*"
-                sub_df['Text'] = sub_df['Text'].replace("*fehlende Daten*", "*Ausfüllen*")
-                sub_df = sub_df[['Start_Zeit', 'Phase_Bezeichnung', 'Schritt_Bezeichnung', 'Text']]
+                sub_df['Text'] = sub_df['Text'].replace(
+                    "*fehlende Daten*", "*Ausfüllen*")
+                sub_df = sub_df[['Start_Zeit', 'Phase_Bezeichnung',
+                                 'Schritt_Bezeichnung', 'Text']]
                 prompt += f"\n<Antwort 2>\n{sub_df.to_csv(index=True, sep=';', index_label='Index')}</Antwort 2>\n"
-
+                
                 # Generate Answer 1.2
                 messages.append({"role": "user", "content": prompt})
-                answer = get_answer(tokenizer, language_model, messages, max_new_tokens=max_new_tokens)
-                
+                answer = get_answer(tokenizer, language_model,
+                                    messages, max_new_tokens=max_new_tokens)
+
                 # Extract tagged block
-                block_answer = get_tagged_block(answer, '<Antwort 2>', '</Antwort 2>')
-                
+                block_answer = get_tagged_block(
+                    answer, '<Antwort 2>', '</Antwort 2>')
+
                 # Add to chat history
-                messages.append({"role": "assistant", "content": '\n'.join(block_answer) + '\n'})
+                messages.append(
+                    {"role": "assistant", "content": '\n'.join(block_answer) + '\n'})
 
                 # Check line shapes/errors
                 block_answer = line_errors(block_answer, len(sub_df))
 
                 # Check format
-                correct_format = check_format(block_answer, ['Index','Start_Zeit', 'Phase_Bezeichnung', 'Schritt_Bezeichnung', 'Text'])
-                if not correct_format: raise ValueError(f"Columns or rows do not match")
-                
+                correct_format = check_format(block_answer, [
+                                              'Index', 'Start_Zeit', 'Phase_Bezeichnung', 'Schritt_Bezeichnung', 'Text'])
+                if not correct_format:
+                    raise ValueError(f"Columns or rows do not match")
+
                 # Concat
                 dfs_to_concat.append(block_to_df(block_answer))
-                
+
                 # Output
                 if DEBUG_MODE:
                     with open(f'step_1_{i+1}.txt', 'w') as f:
                         for m in messages:
                             f.write('*'*50+' <'+m['role']+'> '+'*'*50+'\n')
                             f.write(m['content'])
-                
+
                 # Add to chat
                 for m in messages:
-                    chat_container.append({"role": m['role'], "content": m['content']})
-                
+                    chat_container.append(
+                        {"role": m['role'], "content": m['content']})
+
                 # Exit loop
                 n_try = limit_try
                 steps_complete[i] = 1
-                
+
             except:
                 n_try += 1
                 if PRINT_MODE:
-                    print(f'\t\tConnot genreate step_1_{i+1}.txt, will try again')
+                    print(
+                        f'\t\tConnot genreate step_1_{i+1}.txt, will try again')
 
     df_empty_rows = pd.concat(dfs_to_concat)
     df_empty_rows['Text'] = df_empty_rows['Text'].str.replace('"""', '')
@@ -638,27 +686,28 @@ def gen_data(tokenizer, language_model, pocap):
     assert np.prod(steps_complete) == 1, "Not all steps completed"
 
     ####################################### Step 2 #######################################
-    #Variables
+    # Variables
     limit_try = 3
     dfs_to_concat = []
     tokens_per_row = 60
-    
+
     # Sliding Window
     df_splits = df_splitter(df_sample)
     steps_complete = np.zeros(len(df_splits))
-    
+
     for i, sub_df in enumerate(df_splits):
         # Work data
         sub_df = sub_df[['Start_Zeit', 'Phase_Bezeichnung', 'Text']]
         max_new_tokens = tokens_per_row*len(sub_df)
-        
+
         # Try limit_try times, if LM cant follow instructions
         n_try = 0
         while n_try < limit_try:
             try:
                 if PRINT_MODE:
-                    print(f'\tStep 2: {int(i+1)}/{len(df_splits)} max new tokens: {max_new_tokens}')
-                
+                    print(
+                        f'\tStep 2: {int(i+1)}/{len(df_splits)} max new tokens: {max_new_tokens}')
+
                 prompt = """In diesem Schritt wirst du die Konversationen umformulieren.
 * Daten: Du erhältst einen Datensatz im Abschnitt <Daten>, um ihn umzuformulieren. Die Daten enthalten einen Index, die Startzeit der Rede, den gesprochenen Satz eines Chirurgen und eine Bezeichnung für die Operationsphase. 
 * Aufgabe: Deine Aufgabe ist es, die Sätze in der Spalte "Text" im Abschnitt <Daten> umzuformulieren. Schreibe die Sätze so um, dass, wenn das Gespräch mit einer chirurgischen Tätigkeit zusammenhängt, du diesen Kontext beim Umschreiben beibehaltest. Wenn die Konversation keinen Bezug zu einer chirurgischen Tätigkeit hat, führe neue Konversationen.
@@ -669,35 +718,42 @@ def gen_data(tokenizer, language_model, pocap):
 
                 # Generate Answer 2
                 messages = [{"role": "system", "content": role}]
-                messages.append({"role": "user", "content":prompt})
-                answer = get_answer(tokenizer, language_model, messages, max_new_tokens=max_new_tokens)
-                
+                messages.append({"role": "user", "content": prompt})
+                answer = get_answer(tokenizer, language_model,
+                                    messages, max_new_tokens=max_new_tokens)
+
                 # Extract tagged block
-                block_answer = get_tagged_block(answer, '<Antwort 2>', '</Antwort 2>')
-                
+                block_answer = get_tagged_block(
+                    answer, '<Antwort 2>', '</Antwort 2>')
+
                 # Add to chat history
-                messages.append({"role": "assistant", "content": '\n'.join(block_answer) + '\n'})
+                messages.append(
+                    {"role": "assistant", "content": '\n'.join(block_answer) + '\n'})
 
                 # Check line shapes/errors
                 block_answer = line_errors(block_answer, len(sub_df))
-                
+
                 # Check format
-                correct_format = check_format(block_answer, ['Index', 'Start_Zeit', 'Phase_Bezeichnung', 'Text'])
-                if not correct_format: raise ValueError(f"Columns or rows do not match")
-                
-                # Order columns                
+                correct_format = check_format(
+                    block_answer, ['Index', 'Start_Zeit', 'Phase_Bezeichnung', 'Text'])
+                if not correct_format:
+                    raise ValueError(f"Columns or rows do not match")
+
+                # Order columns
                 df_answer = block_to_df(block_answer)
-                df_answer = df_answer[['Start_Zeit', 'Text', 'Phase_Bezeichnung']]
-                
+                df_answer = df_answer[['Start_Zeit',
+                                       'Text', 'Phase_Bezeichnung']]
+
                 # Check phase-column-not-numeric error
-                df_answer['Phase_Bezeichnung'] = df_answer['Phase_Bezeichnung'].apply(pd.to_numeric)
-    
+                df_answer['Phase_Bezeichnung'] = df_answer['Phase_Bezeichnung'].apply(
+                    pd.to_numeric)
+
                 # Check language
                 # maybe TODO
-                
+
                 # Concat
                 dfs_to_concat.append(df_answer)
-                
+
                 # Output
                 if DEBUG_MODE:
                     with open(f'step_2_{i+1}.txt', 'w') as f:
@@ -706,23 +762,25 @@ def gen_data(tokenizer, language_model, pocap):
                             f.write(m['content'])
                 if LOG_MODE:
                     for m in messages:
-                        chat_container.append({"role": m['role'], "content": m['content']})
-                
+                        chat_container.append(
+                            {"role": m['role'], "content": m['content']})
+
                 # Exit loop
                 n_try = limit_try
                 steps_complete[i] = 1
-                
+
             except:
                 n_try += 1
-                if n_try == limit_try: 
+                if n_try == limit_try:
                     raise ValueError(f"Can't generate data:(")
-                
+
                 if PRINT_MODE:
-                    print(f'\t\tConnot genreate step_3_{i+1}.txt, will try again')
+                    print(
+                        f'\t\tConnot genreate step_3_{i+1}.txt, will try again')
 
     # Check if all steps completed
     assert np.prod(steps_complete) == 1, "Not all steps completed"
-    
+
     # Merge dataframes and process
     result_df = pd.concat(dfs_to_concat)
     result_df = result_df.rename(columns={
@@ -731,33 +789,35 @@ def gen_data(tokenizer, language_model, pocap):
     })
     result_df['Text'] = result_df['Text'].str.strip()
     result_df['Heritage'] = heritage
-    
+
     # Remove log files
     if DEBUG_MODE:
         for file in listdir('./', ending='.txt'):
-            os.remove(file) 
-            
+            os.remove(file)
+
     return result_df, chat_container
-        
+
 
 ####################################### Main #######################################
+
+
 if __name__ == "__main__":
     # Args
     parser = argparse.ArgumentParser(
         description="Synthetic Data Generation for SPR")
-    
+
     parser.add_argument('-t', '--target_path', type=str,
                         default='SynPoCaP/',
                         help='path to save generated data')
 
-    parser.add_argument('-n', '--num_target', 
+    parser.add_argument('-n', '--num_target',
                         type=int, default=1,
                         help='number of data to generate')
-    
-    parser.add_argument('-p', '--prefix_index', 
+
+    parser.add_argument('-p', '--prefix_index',
                         type=int, default=0,
                         help='prefix start index of new data')
-    
+
     args = parser.parse_args()
 
     # Target folder
@@ -770,13 +830,14 @@ if __name__ == "__main__":
     prefix_idx = args.prefix_index
     model_id = 'mistralai/Mistral-Large-Instruct-2407'
     end_idx = prefix_idx + args.num_target - 1
-    
+
     # Login huggingface environment
     load_dotenv()
     huggingface_hub.login(os.getenv('HF_TOKEN'), add_to_git_credential=False)
-    
+
     # Model
-    auto_tokenizer = AutoTokenizer.from_pretrained(model_id, cache_dir=os.getenv('HF_CACHE_DIR'))
+    auto_tokenizer = AutoTokenizer.from_pretrained(
+        model_id, cache_dir=os.getenv('HF_CACHE_DIR'))
     auto_language_model = AutoModelForCausalLM.from_pretrained(
         model_id,
         device_map='auto',
@@ -786,41 +847,43 @@ if __name__ == "__main__":
 
     # Read reference data
     data_path = 'Transcripts/'
-    seedset = ['OP_005.csv', 'OP_023.csv', 'OP_027.csv', 'OP_040.csv', 
+    seedset = ['OP_005.csv', 'OP_023.csv', 'OP_027.csv', 'OP_040.csv',
                'OP_035.csv', 'OP_038.csv', 'OP_013.csv', 'OP_009.csv',
                'OP_011.csv', 'OP_007.csv', 'OP_019.csv', 'OP_002.csv',
-               'OP_039.csv', 'OP_026.csv', 'OP_016.csv'] #006 -> 500+, 17, 22, 24, 32 --> 230+
+               'OP_039.csv', 'OP_026.csv', 'OP_016.csv']  # 006 -> 500+, 17, 22, 24, 32 --> 230+
     seedset = sorted([os.path.join('Transcripts/', s) for s in seedset])
-    
-    # PoCaP 
+
+    # PoCaP
     pocap = PoCaPCorpus(seedset=seedset, target_path=args.target_path)
 
     # Generate Data
     while prefix_idx <= end_idx and error_count < error_patience:
         try:
             # set save name
-            save_name = os.path.join(args.target_path, prefix(prefix_idx+1, 'SynOP_')+".csv")
+            save_name = os.path.join(
+                args.target_path, prefix(prefix_idx+1, 'SynOP_')+".csv")
             print(f"Generating: {save_name}")
-        
+
             # generate data
             generation_start = time.time()
             df, chat_container = gen_data(
                 tokenizer=auto_tokenizer,
-                language_model=auto_language_model, 
-                pocap=pocap 
+                language_model=auto_language_model,
+                pocap=pocap
             )
 
             # save & update
             df.to_csv(save_name)
             pocap.add_to_dataset(save_name)
-            
+
             # save log
             with open(save_name[:-4] + ".txt", "w") as f:
                 for c in chat_container:
                     f.write('\n'+'*'*50+' <'+c['role']+'> '+'*'*50+'\n')
                     f.write(c['content'])
-                f.write(f'\nElapsed time:\t{time.time() - generation_start}(s)')
-            
+                f.write(
+                    f'\nElapsed time:\t{time.time() - generation_start}(s)')
+
             # increment
             prefix_idx += 1
             error_count = 0
