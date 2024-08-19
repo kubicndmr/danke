@@ -79,7 +79,7 @@ if __name__ == "__main__":
         
         # get file pairs
         to_files_csv, _ = get_files(args.to_path)
-        from_files_csv, from_files_txt = get_files(args.to_path)
+        from_files_csv, from_files_txt = get_files(args.from_path)
         
         last_index = int(to_files_csv[-1][-9:-4])
         input(f"Last index of existing files is {last_index}. Continue?")

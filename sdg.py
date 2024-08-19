@@ -528,7 +528,7 @@ def gen_data(tokenizer, language_model, pocap):
     }
 
     cluster_prompt = {
-        'Vorbereitung': '''In der Phase Vorbereitung: wurden fünf Mal Aussagen wie 1) 'Nicht hinlangen, keine Angst, ich mache es gleich so, dass Sie wieder rausschauen.' 2) 'Ich decke Sie mal ein bisschen zu, aber ich mache es sofort wieder weg.' 3) 'Ich gehe mal kurz über die Augen, deswegen bitte kurz die Augen schließen.' wurden vor der Tuchabdeckung geäußert, um den Patienten zu beruhigen. Fünf Mal Aussagen wie 1) 'Nehmen Sie mal das sterile Tuch.' 2) 'Ich decke Sie gleich mit einem OP-Tuch ab.' 3) 'Wir legen jetzt schon mal ein steriles Tuch bei Ihnen auf.' wurden geäußert, um den Patienten über den bevorstehenden Schritt „0.5) Patient steril abgedeckt“ zu informieren"''',
+        'Vorbereitung': '''In der Phase Vorbereitung: fünf Mal Aussagen wie 1) 'Nicht hinlangen, keine Angst, ich mache es gleich so, dass Sie wieder rausschauen.' 2) 'Ich decke Sie mal ein bisschen zu, aber ich mache es sofort wieder weg.' 3) 'Ich gehe mal kurz über die Augen, deswegen bitte kurz die Augen schließen.' wurden vor der Tuchabdeckung geäußert, um den Patienten zu beruhigen. Fünf Mal Aussagen wie 1) 'Nehmen Sie mal das sterile Tuch.' 2) 'Ich decke Sie gleich mit einem OP-Tuch ab.' 3) 'Wir legen jetzt schon mal ein steriles Tuch bei Ihnen auf.' wurden geäußert, um den Patienten über den bevorstehenden Schritt „0.5) Patient steril abgedeckt“ zu informieren"''',
         'Punktion': '''In der Phase Punktion: 35 Mal Aussagen ähnlich wie 1) "Bitte pressen Sie kräftig in den Bauch, als ob Sie auf die Toilette müssten.", 2) "Nochmal kräftig in den Bauch reinpressen, bitte." 3)"Einatmen, ausatmen und dann kräftig in den Bauch pressen." und sieben Mal Aussagen ähnlich wie 1) "Bitte atmen Sie tief ein." 2)"Halten Sie die Luft an." 3) "Atmen Sie langsam weiter." wurden während des chirurgischen Schritts '1.2 Ultraschallgeführte Punktion' geäußert, um die Punktionsstelle besser sichtbar zu machen.''',
         'Führungsdraht': '''In der Phase Führungsdraht: sieben Mal Aussagen ähnlich wie 1) "Bitte blenden Sie oben und unten auf." 2) "Blenden Sie links und rechts ein." 3) "Blenden Sie oben, unten, links und rechts ein." vor oder während der Röntgenaufnahme geäußert, um den Kollimator mithilfe der Assistentin zu steuern. Vier Mal Aussagen ähnlich wie 1) "Wir haben den schwierigen Schritt geschafft und sind in die Vene gekommen." 2) "Wir sind bereits in der Vene, das hat super geklappt." 3) "Den schwierigen Schritt haben wir geschafft, jetzt wird es noch ein bisschen pieksen." wurden geäußert, um den Patienten darüber zu informieren, dass die Phase 'Führungsdraht' zu Ende gekommen ist.''',
         'Pouchvorbereitung-und-Katheterplatzierung': '''In der Phase Pouchvorbereitung-und-Katheterplatzierung: 23 Mal Aussagen wie 1) "Jetzt wird die lokale Betäubung verabreicht." 2) "Wir warten, bis die Betäubung wirkt." 3) "Die Betäubung wirkt gut bei Ihnen." wurden geäußert, um den Patienten über den Schritt „3.1) Lokale Anästhesie“ zu informieren.''',
@@ -618,12 +618,12 @@ def gen_data(tokenizer, language_model, pocap):
                 prompt = """\nDu wirst die fehlenden Konversationen im Abschnitt <Daten 2> ergänzen, indem du chirurgische Phasen und Schritte berücksichtigst.
 * Daten: Du erhältst eine Analyse der chirurgischen Phasen und Schritte in deiner vorherigen Antwort und einen Datensatz mit fehlenden Unterhaltungen im Abschnitt <Daten 2>. Der Datensatz enthalt einen Index, die Startzeit der Rede, den gesprochenen Satz eines Chirurgen und eine Bezeichnung für die Operationsphase.
 * Aufgabe: Deine Aufgabe ist es, die Zeilen in der Spalte 'Schritte_Bezeichnung' und 'Text', die mit '"Ausfüllen"' markiert sind, zu ergänzen. Die Spalte Schritt_Bezeichnung zeigt an, welcher chirurgische Schritt in dieser Datenzeile läuft, und die Spalte Text zeigt das Gespräch des Chirurgen mit dem Arzthelfer oder dem Patienten im Operationssaal.
-* Strategie: Verwende die Analyse aus Ihrer vorherigen Antwort und gib zunächst in der Spalte 'Schritt_Bezeichnung' den laufenden Operationsschritt an. Berücksichtig, welche chirurgischen Phasen oder Schritte wurden abgeschlossen, oder durchgeführt werden. Dann erzeuge entsprechende Sätze für diesen Schritt in der Spalte 'Text'.
+* Strategie: Verwende die Analyse aus deiner vorherigen Antwort über welche chirurgischen Phasen oder Schritte wurden abgeschlossen, oder durchgeführt werden. Gib zunächst in der Spalte 'Schritt_Bezeichnung' den laufenden Operationsschritt an. Wenn es Aktivitäten im Zusammenhang mit diesem chirurgischen Schritt gibt, die in den Daten nicht erwähnt werden, dann erzeuge entsprechende Sätze für diesen Schritt in der Spalte „Text“. Wenn alle notwendigen Gespräche über den Eingriff bereits abgeschlossen sind, erstelle Sätze über allgemeine Alltagsthemen, um ein Gespräch mit dem Patienten zu führen.
 * Phrasen: Um einen besseren Kontext für den gesamten Datensatz zu schaffen, werden Sätze mit ähnlichen Phrasen über alle Operationen hinweg in Clustern zusammengefasst. Auf diese Weise kannst du die wiederkehrenden Phrasen beobachten, die von Chirurgen während jeder chirurgischen Phase verwendet werden. Dann kannst du auf der Grundlage dieser Sätze neue Sätze bilden, aber verwende nicht direkt die gleichen Sätze. Phrasen in dieser Phase:\n"""
                 for phase in which_phase:
                     prompt += cluster_prompt[phase]
                 prompt += """
-* Stil: Erstelle die neue Sätze in einem konsistenten Stil mit den unten angegebenen Daten. Stell dich sicher, dass die Nachbarsätzen anknüpfen, wobei der Kontext erhalten bleibt. Wenn du als Chirurg eine Hilfe bei der Durchführung dieser Schritte benötigst, z. B. um das Röntgengerät an den richtigen Ort zu fahren, frage an die Assistentin. Wenn notwendige verfahrensbezogene Gespräche bereits abgeschlossen sind, aber noch Textzeilen auszufüllen sind, führ ein tägliches Gespräch mit dem Patienten.
+* Stil: Erstelle die neue Sätze in einem konsistenten Stil mit den unten angegebenen Daten. Stell dich sicher, dass die Nachbarsätzen anknüpfen, wobei der Kontext erhalten bleibt. Wenn du als Chirurg eine Hilfe bei der Durchführung dieser Schritte benötigst, z. B. um das Röntgengerät an den richtigen Ort zu fahren, frage an die Assistentin.
 * Format: Gib deine anwort nur auf Deutsch und im Abschnitt < Antwort 2>. Antwort im CSV-Format wie in der Vorlage <Antwort 2> und verwende immer die Tags <Antwort 2> und </Antwort 2> am Anfang und Ende deiner Antwort."""
                 prompt += f"\n<Daten 2>\n{sub_print_df.to_csv(index=True, sep=';', index_label='Index')}</Daten 2>\n"
                 sub_df['Schritt_Bezeichnung'] = "*Ausfüllen*"
@@ -710,7 +710,7 @@ def gen_data(tokenizer, language_model, pocap):
 
                 prompt = """In diesem Schritt wirst du die Konversationen umformulieren.
 * Daten: Du erhältst einen Datensatz im Abschnitt <Daten>, um ihn umzuformulieren. Die Daten enthalten einen Index, die Startzeit der Rede, den gesprochenen Satz eines Chirurgen und eine Bezeichnung für die Operationsphase. 
-* Aufgabe: Deine Aufgabe ist es, die Sätze in der Spalte "Text" im Abschnitt <Daten> umzuformulieren. Schreibe die Sätze so um, dass, wenn das Gespräch mit einer chirurgischen Tätigkeit zusammenhängt, du diesen Kontext beim Umschreiben beibehaltest. Wenn die Konversation keinen Bezug zu einer chirurgischen Tätigkeit hat, führe neue Konversationen.
+* Aufgabe: Deine Aufgabe ist es, die Sätze in der Spalte "Text" im Abschnitt <Daten> umzuformulieren. Ihre Aufgabe ist es, die Sätze in der Spalte „Text“ im Abschnitt <Daten> neu zu schreiben. Schreibe die Sätze so um, dass du den Kontext und den Sprachstil während des gesamten Vorgangs beibehältst.
 * Format: Gib deine anwort nur auf Deutsch und im Abschnitt < Antwort 2>. Antwort im CSV-Format wie in der Vorlage <Antwort 2> und verwende immer die Tags <Antwort 2> und </Antwort 2> am Anfang und Ende deiner Antwort."""
                 prompt += f"\n<Daten>\n{sub_df.to_csv(index=True, sep=';', index_label='Index')}</Daten>\n"
                 sub_df.loc[:, 'Text'] = '*Ausfüllen*'
@@ -719,8 +719,8 @@ def gen_data(tokenizer, language_model, pocap):
                 # Generate Answer 2
                 messages = [{"role": "system", "content": role}]
                 messages.append({"role": "user", "content": prompt})
-                answer = get_answer(tokenizer, language_model,
-                                    messages, max_new_tokens=max_new_tokens)
+                answer = get_answer(tokenizer, language_model, messages,
+                                    max_new_tokens=max_new_tokens, temperature=1.1)
 
                 # Extract tagged block
                 block_answer = get_tagged_block(
