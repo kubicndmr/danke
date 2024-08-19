@@ -542,6 +542,7 @@ def gen_data(tokenizer, language_model, pocap):
     # Variables
     limit_try = 3
     tokens_per_row = 100
+    daily_percentage = 0.25 + np.random.uniform(0.05, 0.05)
 
     # System Prompt
     role = """Du bist ein hilfsbereites Assistent, das die Chirurgen mit der Hilfe der Beispieldaten nachahmt. Die Aufgabe ist es, künstliche Gespräche eines Chirurgen mit dem medizinischen Assistenten und dem Patienten während einer Port-Katheter-Platzierung Operation zu generieren. Die neu generierten Daten werden für das Training eines textbasierten Deep-Learning-Modells verwendet, das entwickelt wurde, um die chirurgischen Phasen der Port-Katheter-Placement-Operation zu erkennen."""
@@ -618,7 +619,7 @@ def gen_data(tokenizer, language_model, pocap):
                 prompt = """\nDu wirst die fehlenden Konversationen im Abschnitt <Daten 2> ergänzen, indem du chirurgische Phasen und Schritte berücksichtigst.
 * Daten: Du erhältst eine Analyse der chirurgischen Phasen und Schritte in deiner vorherigen Antwort und einen Datensatz mit fehlenden Unterhaltungen im Abschnitt <Daten 2>. Der Datensatz enthalt einen Index, die Startzeit der Rede, den gesprochenen Satz eines Chirurgen und eine Bezeichnung für die Operationsphase.
 * Aufgabe: Deine Aufgabe ist es, die Zeilen in der Spalte 'Schritte_Bezeichnung' und 'Text', die mit '"Ausfüllen"' markiert sind, zu ergänzen. Die Spalte Schritt_Bezeichnung zeigt an, welcher chirurgische Schritt in dieser Datenzeile läuft, und die Spalte Text zeigt das Gespräch des Chirurgen mit dem Arzthelfer oder dem Patienten im Operationssaal.
-* Strategie: Verwende die Analyse aus deiner vorherigen Antwort über welche chirurgischen Phasen oder Schritte wurden abgeschlossen, oder durchgeführt werden. Gib zunächst in der Spalte 'Schritt_Bezeichnung' den laufenden Operationsschritt an. Wenn es Aktivitäten im Zusammenhang mit diesem chirurgischen Schritt gibt, die in den Daten nicht erwähnt werden, dann erzeuge entsprechende Sätze für diesen Schritt in der Spalte „Text“. Wenn alle notwendigen Gespräche über den Eingriff bereits abgeschlossen sind, erstelle Sätze über allgemeine Alltagsthemen, um ein Gespräch mit dem Patienten zu führen.
+* Strategie: Verwende die Analyse aus deiner vorherigen Antwort über welche chirurgischen Phasen oder Schritte wurden abgeschlossen, oder durchgeführt werden. Gib zunächst in der Spalte 'Schritt_Bezeichnung' den laufenden Operationsschritt an, dann erzeuge entsprechende Sätze für diesen Schritt in der Spalte „Text“. Wenn in der Spalte „Schritt_Bezeichnung“ bereits „Täglich“ steht, erstelle stattdessen einen themenfremden Satz, um ein alltägliches Gespräch mit dem Patienten zu beginnen.
 * Phrasen: Um einen besseren Kontext für den gesamten Datensatz zu schaffen, werden Sätze mit ähnlichen Phrasen über alle Operationen hinweg in Clustern zusammengefasst. Auf diese Weise kannst du die wiederkehrenden Phrasen beobachten, die von Chirurgen während jeder chirurgischen Phase verwendet werden. Dann kannst du auf der Grundlage dieser Sätze neue Sätze bilden, aber verwende nicht direkt die gleichen Sätze. Phrasen in dieser Phase:\n"""
                 for phase in which_phase:
                     prompt += cluster_prompt[phase]
@@ -626,11 +627,17 @@ def gen_data(tokenizer, language_model, pocap):
 * Stil: Erstelle die neue Sätze in einem konsistenten Stil mit den unten angegebenen Daten. Stell dich sicher, dass die Nachbarsätzen anknüpfen, wobei der Kontext erhalten bleibt. Wenn du als Chirurg eine Hilfe bei der Durchführung dieser Schritte benötigst, z. B. um das Röntgengerät an den richtigen Ort zu fahren, frage an die Assistentin.
 * Format: Gib deine anwort nur auf Deutsch und im Abschnitt < Antwort 2>. Antwort im CSV-Format wie in der Vorlage <Antwort 2> und verwende immer die Tags <Antwort 2> und </Antwort 2> am Anfang und Ende deiner Antwort."""
                 prompt += f"\n<Daten 2>\n{sub_print_df.to_csv(index=True, sep=';', index_label='Index')}</Daten 2>\n"
+
+                # Adapt answer template
                 sub_df['Schritt_Bezeichnung'] = "*Ausfüllen*"
+                random_indices = np.random.choice(sub_df.index, size=int(
+                    daily_percentage * len(sub_df)), replace=False)
+                sub_df.loc[random_indices, 'Schritt_Bezeichnung'] = 'Täglich'
                 sub_df['Text'] = sub_df['Text'].replace(
                     "*fehlende Daten*", "*Ausfüllen*")
                 sub_df = sub_df[['Start_Zeit', 'Phase_Bezeichnung',
                                  'Schritt_Bezeichnung', 'Text']]
+                # Add to prompt
                 prompt += f"\n<Antwort 2>\n{sub_df.to_csv(index=True, sep=';', index_label='Index')}</Antwort 2>\n"
 
                 # Generate Answer 1.2
