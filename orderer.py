@@ -64,8 +64,7 @@ if __name__ == "__main__":
         
         os.mkdir(args.to_path)
 
-        files_csv = listdir(args.from_path, '.csv')
-        files_txt = listdir(args.from_path, '.txt')
+        files_csv, files_txt = get_files(args.from_path)
         
         for i, (c,t) in enumerate(zip(files_csv, files_txt)):
             print(f"{c} \t-> \t{os.path.join(args.to_path, prefix(i+1, 'SynOP_'))+ '.csv'}")
