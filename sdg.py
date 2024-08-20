@@ -374,8 +374,7 @@ def drop_and_add(df, pocap):
 
     # Find number of daily conversations to add
     new_len = len(df) + np.sum(to_add)
-    per = pocap.sample_daily_percentage()
-    daily_target = int(new_len * per)
+    daily_target = int(new_len * pocap.sample_daily_percentage())
     daily_current = int(df['ToC_Bezeichnung'].value_counts()['T'])
     daily_diff = daily_target - daily_current
 
@@ -389,7 +388,7 @@ def drop_and_add(df, pocap):
                 'Text': [fill_tag],
                 'Phase_Bezeichnung': [np.nan],
                 'Heritage': [0],
-                'ToC_Bezeichnung': [['C' if daily_diff <= 0 else 'N']]
+                'ToC_Bezeichnung': ['C' if daily_diff <= 0 else 'N']
             })
 
             if len(phase_df) == 1:
@@ -461,11 +460,10 @@ def drop_and_add(df, pocap):
     # Adjust daily conversation amount
     if daily_diff > 0:
         n_indices = df.index[df['ToC_Bezeichnung'] == 'N'].tolist()
-        random_indices = np.random.choice(
-            n_indices, size=daily_diff, replace=False)
+        random_indices = np.random.choice(n_indices, size=daily_diff, replace=False)
         df.loc[random_indices, 'ToC_Bezeichnung'] = 'T'
         df['ToC_Bezeichnung'].replace('N', 'C', inplace=True)
-
+    
     # Copy also empty datatframe
     df_to_fill = df.copy()
     df_to_fill = df_to_fill[df_to_fill['Text'] == fill_tag]
