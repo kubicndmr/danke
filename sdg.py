@@ -18,9 +18,9 @@ from transformers import AutoModelForCausalLM
 LOG_MODE = True
 DEBUG_MODE = False
 PRINT_MODE = False
+np.random.seed(271)
 
 if DEBUG_MODE:
-    np.random.seed(1)
     torch.manual_seed(1)
     torch.cuda.manual_seed(1)
 
@@ -28,7 +28,7 @@ if DEBUG_MODE:
 
 
 class PoCaPCorpus():
-    def __init__(self, seedset, target_path):
+    def __init__(self, seedset, target_path, topic_path=None):
         self.seedset = seedset
         print('Seedset', seedset)
         self.target_path = target_path
@@ -40,6 +40,9 @@ class PoCaPCorpus():
             self.seed_target_dir()
         self.dataset = listdir(self.target_path, '.csv')
         print('Dataset Len: ', len(self.dataset))
+
+        if topic_path != None:
+            self.topic = pd.read_csv(topic_path, index_col=0)
 
     def count_corpus(self):
         self.phase_count = np.zeros((len(self.seedset), 8))
@@ -94,6 +97,9 @@ class PoCaPCorpus():
 
     def sample_daily_percentage(self):  # pre-computed
         return 0.28 + np.random.uniform(-0.07, 0.07)
+
+    def sample_topic(self):
+        return self.topic.loc[np.random.randint(0, 100), 'Thema']
 
     def plot_violin(self):
         # update counts
@@ -278,9 +284,16 @@ def block_to_df(block):
     return df
 
 
-def line_errors(block, true_len):
+def line_errors(block, true_len, delimeter=";"):
     if true_len == len(block) - 1:
-        return block
+        # delimeter ending error
+        tested_block = [block[0]]
+        for line in block[1:]:
+            if line.endswith(delimeter):
+                tested_block.append(line[:-1])
+            else:
+                tested_block.append(line)
+        return tested_block
     else:
         # csv input error
         tested_block = []
@@ -372,12 +385,6 @@ def drop_and_add(df, pocap):
                     to_drop[phase]), replace=False, p=prob)
                 df = df.drop(drop_indices)
 
-    # Find number of daily conversations to add
-    new_len = len(df) + np.sum(to_add)
-    daily_target = int(new_len * pocap.sample_daily_percentage())
-    daily_current = int(df['ToC_Bezeichnung'].value_counts()['T'])
-    daily_diff = daily_target - daily_current
-
     # Add lines
     phase_dfs = []
     for phase in range(len(to_add)):
@@ -388,7 +395,7 @@ def drop_and_add(df, pocap):
                 'Text': [fill_tag],
                 'Phase_Bezeichnung': [np.nan],
                 'Heritage': [0],
-                'ToC_Bezeichnung': ['C' if daily_diff <= 0 else 'N']
+                'ToC_Bezeichnung': ['N']
             })
 
             if len(phase_df) == 1:
@@ -458,12 +465,28 @@ def drop_and_add(df, pocap):
     df['Heritage'] = df['Heritage'] + 1
 
     # Adjust daily conversation amount
-    if daily_diff > 0:
+    total_rows = len(df)
+    sample_per = pocap.sample_daily_percentage()
+    target_daily_count = int(total_rows * sample_per)
+    target_surgical_count = total_rows - target_daily_count
+
+    current_daily_count = df['ToC_Bezeichnung'].value_counts().get('T', 0)
+    current_surgical_count = df['ToC_Bezeichnung'].value_counts().get('C', 0)
+
+    needed_daily = target_daily_count - current_daily_count
+    needed_surgical = target_surgical_count - current_surgical_count
+
+    if needed_daily < 0:
+        df['ToC_Bezeichnung'] = df['ToC_Bezeichnung'].replace('N', 'C')
+    elif needed_surgical < 0:
+        df['ToC_Bezeichnung'] = df['ToC_Bezeichnung'].replace('N', 'T')
+    else:
         n_indices = df.index[df['ToC_Bezeichnung'] == 'N'].tolist()
-        random_indices = np.random.choice(n_indices, size=daily_diff, replace=False)
-        df.loc[random_indices, 'ToC_Bezeichnung'] = 'T'
-        df['ToC_Bezeichnung'].replace('N', 'C', inplace=True)
-    
+        selected_indices = np.random.choice(
+            n_indices, size=needed_daily, replace=False)
+        df.loc[selected_indices, 'ToC_Bezeichnung'] = 'T'
+        df['ToC_Bezeichnung'] = df['ToC_Bezeichnung'].replace('N', 'C')
+
     # Copy also empty datatframe
     df_to_fill = df.copy()
     df_to_fill = df_to_fill[df_to_fill['Text'] == fill_tag]
@@ -534,6 +557,7 @@ def gen_data(tokenizer, language_model, pocap):
                         Example surgical operation transcript
     '''
     # Get sample data
+    daily_topic = pocap.sample_topic()
     sample_data = pocap.get_sample_data()
     chat_container = [{'role': 'sample', 'content': sample_data}]
 
@@ -558,7 +582,7 @@ def gen_data(tokenizer, language_model, pocap):
     ####################################### Step 1 #######################################
     # Variables
     limit_try = 3
-    tokens_per_row = 100
+    tokens_per_row = 75
 
     # System Prompt
     role = """Du bist ein hilfsbereites Assistent, das die Chirurgen mit der Hilfe der Beispieldaten nachahmt. Die Aufgabe ist es, künstliche Gespräche eines Chirurgen mit dem medizinischen Assistenten und dem Patienten während einer Port-Katheter-Platzierung Operation zu generieren. Die neu generierten Daten werden für das Training eines textbasierten Deep-Learning-Modells verwendet, das entwickelt wurde, um die chirurgischen Phasen der Port-Katheter-Placement-Operation zu erkennen."""
@@ -638,10 +662,10 @@ def gen_data(tokenizer, language_model, pocap):
                     {"role": "assistant", "content": '\n'.join(block_answer)+'\n'})
 
                 ####################################### Step 1.2 #######################################
-                prompt = """\nDu wirst die fehlenden Konversationen im Abschnitt <Daten 2> ergänzen, indem du chirurgische Phasen und Schritte berücksichtigst.
+                prompt = f"""\nDu wirst die fehlenden Konversationen im Abschnitt <Daten 2> ergänzen, indem du chirurgische Phasen und Schritte berücksichtigst.
 * Daten: Du erhältst eine Analyse der chirurgischen Phasen und Schritte in deiner vorherigen Antwort und einen Datensatz mit fehlenden Unterhaltungen im Abschnitt <Daten 2>. Der Datensatz enthalt einen Index, die Startzeit der Rede, den gesprochenen Satz eines Chirurgen und eine Bezeichnung für die Operationsphase.
 * Aufgabe: Deine Aufgabe ist es, die Zeilen in der Spalte 'Schritte_Bezeichnung' und 'Text', die mit '"Ausfüllen"' markiert sind, zu ergänzen. Die Spalte Schritt_Bezeichnung zeigt an, welcher chirurgische Schritt in dieser Datenzeile läuft, und die Spalte Text zeigt das Gespräch des Chirurgen mit dem Arzthelfer oder dem Patienten im Operationssaal.
-* Strategie: Verwende die Analyse aus deiner vorherigen Antwort über welche chirurgischen Phasen oder Schritte wurden abgeschlossen, oder durchgeführt werden. Gib zunächst in der Spalte 'Schritt_Bezeichnung' den laufenden Operationsschritt an, dann erzeuge entsprechende Sätze für diesen Schritt in der Spalte „Text“. Wenn in der Spalte „Schritt_Bezeichnung“ bereits „Täglich“ steht, erstelle stattdessen einen themenfremden Satz, um ein alltägliches Gespräch mit dem Patienten zu beginnen. Falls vorhanden, setze das vorherige Tagesgespräch fort.
+* Strategie: Verwende die Analyse aus deiner vorherigen Antwort über welche chirurgischen Phasen oder Schritte wurden abgeschlossen, oder durchgeführt werden. Gib zunächst in der Spalte 'Schritt_Bezeichnung' den laufenden Operationsschritt an, dann erzeuge entsprechende Sätze für diesen Schritt in der Spalte „Text“. Wenn in der Spalte „Schritt_Bezeichnung“ bereits „Täglich“ steht, erstelle stattdessen einen themenfremden Satz, um ein alltägliches Gespräch mit dem Patienten zu beginnen. Das Thema des Gesprächs ist: {daily_topic}.
 * Phrasen: Um einen besseren Kontext für den gesamten Datensatz zu schaffen, werden Sätze mit ähnlichen Phrasen über alle Operationen hinweg in Clustern zusammengefasst. Auf diese Weise kannst du die wiederkehrenden Phrasen beobachten, die von Chirurgen während jeder chirurgischen Phase verwendet werden. Dann kannst du auf der Grundlage dieser Sätze neue Sätze bilden, aber verwende nicht direkt die gleichen Sätze. Phrasen in dieser Phase:\n"""
                 for phase in which_phase:
                     prompt += cluster_prompt[phase]
@@ -659,6 +683,7 @@ def gen_data(tokenizer, language_model, pocap):
                     "*fehlende Daten*", "*Ausfüllen*")
                 sub_df = sub_df[['Start_Zeit', 'Phase_Bezeichnung',
                                  'Schritt_Bezeichnung', 'Text']]
+
                 # Add to prompt
                 prompt += f"\n<Antwort 2>\n{sub_df.to_csv(index=True, sep=';', index_label='Index')}</Antwort 2>\n"
 
@@ -710,8 +735,8 @@ def gen_data(tokenizer, language_model, pocap):
                         f'\t\tConnot genreate step_1_{i+1}.txt, will try again')
 
     df_empty_rows = pd.concat(dfs_to_concat)
-    df_empty_rows['Text'] = df_empty_rows['Text'].str.replace('"""', '')
     df_sample.loc[df_empty_rows.index, 'Text'] = df_empty_rows['Text']
+    df_sample['Text'] = df_sample['Text'].str.strip('"""')
     assert np.prod(steps_complete) == 1, "Not all steps completed"
 
     ####################################### Step 2 #######################################
@@ -805,7 +830,7 @@ def gen_data(tokenizer, language_model, pocap):
 
                 if PRINT_MODE:
                     print(
-                        f'\t\tConnot genreate step_3_{i+1}.txt, will try again')
+                        f'\t\tConnot genreate step_2_{i+1}.txt, will try again')
 
     # Check if all steps completed
     assert np.prod(steps_complete) == 1, "Not all steps completed"
@@ -817,6 +842,7 @@ def gen_data(tokenizer, language_model, pocap):
         'Phase_Bezeichnung': 'Phase_Label'
     })
     result_df['Text'] = result_df['Text'].str.strip()
+    result_df['Text'] = result_df['Text'].str.strip('"""')
     result_df['Heritage'] = heritage
     result_df['ToC_Bezeichnung'] = toc_bezeichnung
 
@@ -900,7 +926,8 @@ if __name__ == "__main__":
     seedset = sorted([os.path.join('Transcripts/', s) for s in seedset])
 
     # PoCaP
-    pocap = PoCaPCorpus(seedset=seedset, target_path=args.target_path)
+    pocap = PoCaPCorpus(
+        seedset=seedset, target_path=args.target_path, topic_path='ToC/topics.csv')
 
     # Generate Data
     while prefix_idx <= end_idx and error_count < error_patience:
