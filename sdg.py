@@ -28,7 +28,7 @@ if DEBUG_MODE:
 
 
 class PoCaPCorpus():
-    def __init__(self, transcripts, seed, target_path, topic_path=None):
+    def __init__(self, transcripts, seed, target_path, topic_path, persona_path):
         self.transcripts = transcripts
         self.target_path = target_path
         self.index = -1
@@ -54,8 +54,8 @@ class PoCaPCorpus():
         self.dataset = listdir(self.target_path, '.csv')
         print('Dataset Len: ', len(self.dataset))
 
-        if topic_path != None:
-            self.topic = pd.read_csv(topic_path, index_col=0)
+        self.topic = pd.read_csv(topic_path, index_col=0)
+        self.persona = pd.read_csv(persona_path, index_col=0)
 
         self.label_dic = {
             0: 'Vorbereitung', 1: 'Punktion', 2: 'Führungsdraht',
@@ -119,6 +119,9 @@ class PoCaPCorpus():
 
     def sample_daily_topic(self):
         return self.topic.loc[np.random.randint(0, 100), 'Thema']
+
+    def sample_persona(self):
+        return self.persona.loc[np.random.randint(0, 100), 'Persona']
 
     def get_phase_contex(self, phase, N_ops=5):
         phase_numbers = [self.reversed_label_dict[p] for p in phase]
@@ -776,6 +779,7 @@ def gen_data(tokenizer, language_model, pocap):
     limit_try = 3
     dfs_to_concat = []
     tokens_per_row = 60
+    role = f"Du bist {pocap.sample_persona()}"
 
     # Sliding Window
     df_splits = df_splitter(df_sample)
@@ -794,14 +798,14 @@ def gen_data(tokenizer, language_model, pocap):
                     print(
                         f'\tStep 2: {int(i+1)}/{len(df_splits)} max new tokens: {max_new_tokens}')
 
-                prompt = """In diesem Schritt wirst du die Konversationen umformulieren.
-* Daten: Du erhältst einen Datensatz im Abschnitt <Daten>, um ihn umzuformulieren. Die Daten enthalten einen Index, die Startzeit der Rede, den gesprochenen Satz eines Chirurgen und eine Bezeichnung für die Operationsphase. 
-* Aufgabe: Deine Aufgabe ist es, die Sätze in der Spalte "Text" im Abschnitt <Daten> umzuformulieren. Ihre Aufgabe ist es, die Sätze in der Spalte „Text“ im Abschnitt <Daten> neu zu schreiben. Schreibe die Sätze so um, dass du den Kontext und den Sprachstil während des gesamten Vorgangs beibehältst.
+                prompt = """In diesem Schritt wirst du die Konversationen im deinen Still umformulieren.
+* Daten: Du erhältst einen Datensatz im Abschnitt <Daten>, um ihn umzuformulieren. Die Daten enthalten einen Index, die Startzeit der Rede, den gesprochenen Satz und eine Bezeichnung für die Operationsphase. 
+* Aufgabe: Deine Rolle ist es, die beschriebene Persona anzunehmen und die Sätze in der Spalte „Text“ im Abschnitt <Daten> umzuformulieren.
+* Anweisungen: Formuliere jeden Eintrag in der Spalte „Text“ so um, dass die Sätze den Stil und die Charakteristika der angenommenen Persona widerspiegeln. Stell sicher, dass die umformulierten Sätze die ursprüngliche Bedeutung und den Kontext beibehalten, aber klar im einzigartigen Stil und in der Sprache der Persona ausgedrückt werden. Konzentriere dich darauf, die Sprache so zu gestalten, dass sie mit der Art und Weise übereinstimmt, wie die Persona natürlich sprechen würde, einschließlich aller Nuancen, Formulierungen oder stilistischen Entscheidungen, die die Persona definieren. Dein Ziel ist es, den Text so zu transformieren, dass er mit der Art und Weise übereinstimmt, wie Sie als Persona dieselbe Botschaft im Kontext eines Gesprächs im Operationssaal vermitteln würden.
 * Format: Gib deine anwort nur auf Deutsch und im Abschnitt < Antwort 2>. Antwort im CSV-Format wie in der Vorlage <Antwort 2> und verwende immer die Tags <Antwort 2> und </Antwort 2> am Anfang und Ende deiner Antwort."""
                 prompt += f"\n<Daten>\n{sub_df.to_csv(index=True, sep=';', index_label='Index')}</Daten>\n"
                 sub_df.loc[:, 'Text'] = '*Ausfüllen*'
                 prompt += f"\n<Antwort 2>\n{sub_df.to_csv(index=True, sep=';', index_label='Index')}</Antwort 2>\n"
-
                 # Generate Answer 2
                 messages = [{"role": "system", "content": role}]
                 messages.append({"role": "user", "content": prompt})
@@ -947,7 +951,7 @@ if __name__ == "__main__":
 
     # PoCaP
     pocap = PoCaPCorpus(
-        transcripts=transcripts, seed=args.seed_set, target_path=args.target_path, topic_path='ToC/topics.csv')
+        transcripts=transcripts, seed=args.seed_set, target_path=args.target_path, topic_path='ToC/topics.csv', persona_path='ToC/personae.csv')
 
     # Generate Data
     while prefix_idx <= end_idx and error_count < error_patience:
