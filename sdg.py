@@ -28,11 +28,24 @@ if DEBUG_MODE:
 
 
 class PoCaPCorpus():
-    def __init__(self, seedset, target_path, topic_path=None):
-        self.seedset = seedset
-        print('Seedset', seedset)
+    def __init__(self, transcripts, seed, target_path, topic_path=None):
+        self.transcripts = transcripts
         self.target_path = target_path
         self.index = -1
+
+        if seed == -1:
+            self.seedset = transcripts
+        elif seed == 0:
+            self.seedset = transcripts[:4]
+        elif seed == 1:
+            self.seedset = transcripts[4:8]
+        elif seed == 2:
+            self.seedset = transcripts[8:12]
+        elif seed == 3:
+            self.seedset = transcripts[12:]
+        else:
+            raise ValueError(f"Given seed is not correct!")
+        print('Seedset', self.seedset)
 
         self.count_corpus()
         self.compute_quantiles()
@@ -43,6 +56,14 @@ class PoCaPCorpus():
 
         if topic_path != None:
             self.topic = pd.read_csv(topic_path, index_col=0)
+
+        self.label_dic = {
+            0: 'Vorbereitung', 1: 'Punktion', 2: 'Führungsdraht',
+            3: 'Pouchvorbereitung-und-Katheterplatzierung', 4: 'Katheterpositionierung', 5: 'Katheteranpassung',
+            6: 'Katheterkontrolle', 7: 'Abschluss'
+        }
+        self.reversed_label_dict = {
+            value: key for key, value in self.label_dic.items()}
 
     def count_corpus(self):
         self.phase_count = np.zeros((len(self.seedset), 8))
@@ -62,16 +83,14 @@ class PoCaPCorpus():
             df['Heritage'] = 1
             df.to_csv(os.path.join(self.target_path, s.split('/')[-1]))
 
-    def get_sample_data(self):
-        return self.dataset[(self.index-len(self.dataset)) % len(self.dataset)]
+    def draw_reference_op(self):
+        self.reference_op = self.dataset[(
+            self.index-len(self.dataset)) % len(self.dataset)]
+        return self.reference_op
 
     def add_to_dataset(self, data):
         self.dataset[(self.index-len(self.dataset)) % len(self.dataset)] = data
         self.index += 1
-
-    def next_sample(self):
-        self.seed_index += 1
-        return self.dataset[self.seed_index]
 
     def compute_quantiles(self):
         self.lower_quantile_phase = np.quantile(self.phase_count, 0.25, axis=0)
@@ -95,11 +114,29 @@ class PoCaPCorpus():
             a = np.random.uniform(0.2, 0.3)  # 100
         return d, a
 
-    def sample_daily_percentage(self):  # pre-computed
+    def sample_daily_percentage(self):  # pre-computed mean and std
         return 0.28 + np.random.uniform(-0.07, 0.07)
 
-    def sample_topic(self):
+    def sample_daily_topic(self):
         return self.topic.loc[np.random.randint(0, 100), 'Thema']
+
+    def get_phase_contex(self, phase, N_ops=5):
+        phase_numbers = [self.reversed_label_dict[p] for p in phase]
+        valid_ops = [op for op in self.transcripts if op != self.reference_op]
+        ops = np.random.choice(valid_ops, N_ops)
+        prompt = f"In dieser Phase der früheren {N_ops}-Operationen führten die Chirurgen folgende Gespräche:\n"
+
+        for n, op in enumerate(ops):
+            df = pd.read_csv(op, index_col=0)
+            df = df[df['Phase_Label'].isin(phase_numbers)]
+            df = df.drop(columns=['File_Name', 'Start_Time',
+                         'End_Time', 'ToC_Bezeichnung'])
+            df = df[df['Text'] != '<nicht verstanden>']
+            df['Phase_Label'] = df['Phase_Label'].map(self.label_dic)
+
+            prompt += f"\n<Beispieloperation {n+1}>\n{df.to_csv(index=True, sep=';', index_label='Index')}</Beispieloperation {n}>\n"
+
+        return prompt
 
     def plot_violin(self):
         # update counts
@@ -557,17 +594,11 @@ def gen_data(tokenizer, language_model, pocap):
                         Example surgical operation transcript
     '''
     # Get sample data
-    daily_topic = pocap.sample_topic()
-    sample_data = pocap.get_sample_data()
-    chat_container = [{'role': 'sample', 'content': sample_data}]
+    daily_topic = pocap.sample_daily_topic()
+    reference_op = pocap.draw_reference_op()
+    chat_container = [{'role': 'Reference OP', 'content': reference_op}]
 
-    # Dictionaries
-    label_dic = {
-        0: 'Vorbereitung', 1: 'Punktion', 2: 'Führungsdraht',
-        3: 'Pouchvorbereitung-und-Katheterplatzierung', 4: 'Katheterpositionierung', 5: 'Katheteranpassung',
-        6: 'Katheterkontrolle', 7: 'Abschluss'
-    }
-
+    # Cluster
     cluster_prompt = {
         'Vorbereitung': '''In der Phase Vorbereitung: fünf Mal Aussagen wie 1) 'Nicht hinlangen, keine Angst, ich mache es gleich so, dass Sie wieder rausschauen.' 2) 'Ich decke Sie mal ein bisschen zu, aber ich mache es sofort wieder weg.' 3) 'Ich gehe mal kurz über die Augen, deswegen bitte kurz die Augen schließen.' wurden vor der Tuchabdeckung geäußert, um den Patienten zu beruhigen. Fünf Mal Aussagen wie 1) 'Nehmen Sie mal das sterile Tuch.' 2) 'Ich decke Sie gleich mit einem OP-Tuch ab.' 3) 'Wir legen jetzt schon mal ein steriles Tuch bei Ihnen auf.' wurden geäußert, um den Patienten über den bevorstehenden Schritt „0.5) Patient steril abgedeckt“ zu informieren"''',
         'Punktion': '''In der Phase Punktion: 35 Mal Aussagen ähnlich wie 1) "Bitte pressen Sie kräftig in den Bauch, als ob Sie auf die Toilette müssten.", 2) "Nochmal kräftig in den Bauch reinpressen, bitte." 3)"Einatmen, ausatmen und dann kräftig in den Bauch pressen." und sieben Mal Aussagen ähnlich wie 1) "Bitte atmen Sie tief ein." 2)"Halten Sie die Luft an." 3) "Atmen Sie langsam weiter." wurden während des chirurgischen Schritts '1.2 Ultraschallgeführte Punktion' geäußert, um die Punktionsstelle besser sichtbar zu machen.''',
@@ -582,13 +613,14 @@ def gen_data(tokenizer, language_model, pocap):
     ####################################### Step 1 #######################################
     # Variables
     limit_try = 3
+    n_context_op = 3
     tokens_per_row = 75
 
     # System Prompt
     role = """Du bist ein hilfsbereites Assistent, das die Chirurgen mit der Hilfe der Beispieldaten nachahmt. Die Aufgabe ist es, künstliche Gespräche eines Chirurgen mit dem medizinischen Assistenten und dem Patienten während einer Port-Katheter-Platzierung Operation zu generieren. Die neu generierten Daten werden für das Training eines textbasierten Deep-Learning-Modells verwendet, das entwickelt wurde, um die chirurgischen Phasen der Port-Katheter-Placement-Operation zu erkennen."""
 
     # Read Data in German
-    df_sample = pd.read_csv(sample_data, index_col=0)
+    df_sample = pd.read_csv(reference_op, index_col=0)
     df_sample = df_sample.rename(
         columns={'Start_Time': 'Start_Zeit', 'Phase_Label': 'Phase_Bezeichnung'})
 
@@ -604,7 +636,7 @@ def gen_data(tokenizer, language_model, pocap):
     df_to_print = df_sample.copy()
     df_to_print.drop(columns=['Start_Zeit', 'ToC_Bezeichnung'], inplace=True)
     df_to_print['Phase_Bezeichnung'] = df_to_print['Phase_Bezeichnung'].map(
-        label_dic)
+        pocap.label_dic)
 
     # Sliding window
     dfs_to_concat = []
@@ -614,7 +646,7 @@ def gen_data(tokenizer, language_model, pocap):
     for i, sub_df in enumerate(df_splits):
         max_new_tokens = tokens_per_row*len(sub_df)
         sub_df['Phase_Bezeichnung'] = sub_df['Phase_Bezeichnung'].map(
-            label_dic)
+            pocap.label_dic)
 
         # Try limit_try times, if LM cant follow instructions
         n_try = 0
@@ -663,16 +695,14 @@ def gen_data(tokenizer, language_model, pocap):
 
                 ####################################### Step 1.2 #######################################
                 prompt = f"""\nDu wirst die fehlenden Konversationen im Abschnitt <Daten 2> ergänzen, indem du chirurgische Phasen und Schritte berücksichtigst.
-* Daten: Du erhältst eine Analyse der chirurgischen Phasen und Schritte in deiner vorherigen Antwort und einen Datensatz mit fehlenden Unterhaltungen im Abschnitt <Daten 2>. Der Datensatz enthalt einen Index, die Startzeit der Rede, den gesprochenen Satz eines Chirurgen und eine Bezeichnung für die Operationsphase.
-* Aufgabe: Deine Aufgabe ist es, die Zeilen in der Spalte 'Schritte_Bezeichnung' und 'Text', die mit '"Ausfüllen"' markiert sind, zu ergänzen. Die Spalte Schritt_Bezeichnung zeigt an, welcher chirurgische Schritt in dieser Datenzeile läuft, und die Spalte Text zeigt das Gespräch des Chirurgen mit dem Arzthelfer oder dem Patienten im Operationssaal.
-* Strategie: Verwende die Analyse aus deiner vorherigen Antwort über welche chirurgischen Phasen oder Schritte wurden abgeschlossen, oder durchgeführt werden. Gib zunächst in der Spalte 'Schritt_Bezeichnung' den laufenden Operationsschritt an, dann erzeuge entsprechende Sätze für diesen Schritt in der Spalte „Text“. Wenn in der Spalte „Schritt_Bezeichnung“ bereits „Täglich“ steht, erstelle stattdessen einen themenfremden Satz, um ein alltägliches Gespräch mit dem Patienten zu beginnen. Das Thema des Gesprächs ist: {daily_topic}.
-* Phrasen: Um einen besseren Kontext für den gesamten Datensatz zu schaffen, werden Sätze mit ähnlichen Phrasen über alle Operationen hinweg in Clustern zusammengefasst. Auf diese Weise kannst du die wiederkehrenden Phrasen beobachten, die von Chirurgen während jeder chirurgischen Phase verwendet werden. Dann kannst du auf der Grundlage dieser Sätze neue Sätze bilden, aber verwende nicht direkt die gleichen Sätze. Phrasen in dieser Phase:\n"""
+* Daten: Du erhältst eine Analyse der chirurgischen Phasen und Schritte in deiner vorherigen Antwort und einen Datensatz mit fehlenden Unterhaltungen im Abschnitt <Daten 2>. Der Datensatz enthalt einen Index, die Startzeit der Rede, den gesprochenen Satz eines Chirurgen und eine Bezeichnung für die Operationsphase."""
+                prompt += f"\n<Daten 2>\n{sub_print_df.to_csv(index=True, sep=';', index_label='Index')}</Daten 2>\n"
+                prompt += f"""\n* Hintergrundwissen: Die neuen Daten, die du erzeugst, sollten mit den Mustern übereinstimmen, die in früheren Operationen innerhalb des Datensatzes gefunden wurden. Um dir zu helfen, den Kontext der aktuellen chirurgischen Phase zu verstehen, werden zwei Ressourcen bereitgestellt: 1) Vollständige Unterhaltungen des Chirurgen während der letzten {n_context_op} Operationen. 2) Eine Liste von Ausdrücken, die während dieser Phase im gesamten Datensatz häufig verwendet wurden. Verwenden Sie diese Kontextinformationen, wenn Sie neue Sätze erstellen, und achten Sie darauf, denselben Stil wie die vorhandenen Daten beizubehalten.
+1.{pocap.get_phase_contex(which_phase, n_context_op)}
+2.Phrasen in dieser Phase:\n"""
                 for phase in which_phase:
                     prompt += cluster_prompt[phase]
-                prompt += """
-* Stil: Erstelle die neue Sätze in einem konsistenten Stil mit den unten angegebenen Daten. Stell dich sicher, dass die Nachbarsätzen anknüpfen, wobei der Kontext erhalten bleibt. Wenn du als Chirurg eine Hilfe bei der Durchführung dieser Schritte benötigst, z. B. um das Röntgengerät an den richtigen Ort zu fahren, frage an die Assistentin.
-* Format: Gib deine anwort nur auf Deutsch und im Abschnitt < Antwort 2>. Antwort im CSV-Format wie in der Vorlage <Antwort 2> und verwende immer die Tags <Antwort 2> und </Antwort 2> am Anfang und Ende deiner Antwort."""
-                prompt += f"\n<Daten 2>\n{sub_print_df.to_csv(index=True, sep=';', index_label='Index')}</Daten 2>\n"
+                prompt += """\n* Aufgabe: Eine Vorlage für die Antwort findest du im Abschnitt <Antwort 2> unten. Deine Aufgabe ist es, die Zeilen in der Spalte 'Schritte_Bezeichnung' und 'Text', die mit '"Ausfüllen"' markiert sind, zu ergänzen. Die Spalte Schritt_Bezeichnung zeigt an, welcher chirurgische Schritt in dieser Datenzeile läuft, und die Spalte Text zeigt das Gespräch des Chirurgen mit dem Arzthelfer oder dem Patienten im Operationssaal."""
 
                 # Adapt answer template
                 sub_df['Schritt_Bezeichnung'] = "*Ausfüllen*"
@@ -686,6 +716,8 @@ def gen_data(tokenizer, language_model, pocap):
 
                 # Add to prompt
                 prompt += f"\n<Antwort 2>\n{sub_df.to_csv(index=True, sep=';', index_label='Index')}</Antwort 2>\n"
+                prompt += f"""* Strategie: Gib zunächst in der Spalte „Schritt_Name“ den Operationsschritt ein, der deiner Meinung nach durchgeführt werden sollte. Lege deiner Entscheidung die Analyse aus deiner vorherigen Antwort zugrunde und berücksichtige, welche chirurgischen Phasen oder Schritte abgeschlossen sind und welche noch ausstehen. Alle unvollständigen Schritte sollten abgeschlossen werden, bevor die entsprechende chirurgische Phase endet. Achte auf die chronologische Reihenfolge aller chirurgischen Tätigkeiten. Wenn ein chirurgischer Schritt vollständig abgeschlossen ist, sollte er nicht wiederholt werden, oder frühere chirurgische Schritte nicht stattfinden können. Verwende dann nach der Benennung des chirurgischen Schritts die bereitgestellten Hintergrunwissen, um in der Textspalte neue Sätze für den Chirurgen zu erstellen. Wenn häufige Phrasen in den Hintergrundwissen nicht im Abschnitt <Daten 2> verwendet werden, erstelle einen neuen Satz, der von ihnen inspiriert ist. Diese Sätze sollten dem Stil der bestehenden Unterhaltungen entsprechen, aber keine exakten Duplikate sein. Wenn die Sätze im Abschnitt <Daten 2> diese Phrasen bereits enthalten, erstelle einen neuen Satz in deinem Stil. Wenn in der Spalte „Schritt_Bezeichnung“ bereits „Täglich“ steht, erstelle stattdessen einen themenfremden Satz, um ein alltägliches Gespräch mit dem Patienten zu beginnen. Das Thema des Gesprächs ist: {daily_topic}.
+* Format: Gib deine anwort nur auf Deutsch und im Abschnitt < Antwort 2>. Antwort im CSV-Format wie in der Vorlage <Antwort 2> und verwende immer die Tags <Antwort 2> und </Antwort 2> am Anfang und Ende deiner Antwort."""
 
                 # Generate Answer 1.2
                 messages.append({"role": "user", "content": prompt})
@@ -906,28 +938,16 @@ if __name__ == "__main__":
     )
 
     # Read reference data
-    data_path = 'Transcripts/'
-    if args.seed_set == -1:
-        seedset = ['OP_005.csv', 'OP_023.csv', 'OP_027.csv', 'OP_040.csv',
-                   'OP_035.csv', 'OP_038.csv', 'OP_013.csv', 'OP_009.csv',
-                   'OP_011.csv', 'OP_007.csv', 'OP_019.csv', 'OP_002.csv',
-                   'OP_039.csv', 'OP_026.csv', 'OP_016.csv']  # 006 -> 500+, 17, 22, 24, 32 --> 230+
-    elif args.seed_set == 0:
-        seedset = ['OP_005.csv', 'OP_023.csv', 'OP_027.csv', 'OP_040.csv']
-    elif args.seed_set == 1:
-        seedset = ['OP_035.csv', 'OP_038.csv', 'OP_013.csv', 'OP_009.csv']
-    elif args.seed_set == 2:
-        seedset = ['OP_011.csv', 'OP_007.csv', 'OP_019.csv', 'OP_002.csv']
-    elif args.seed_set == 3:
-        seedset = ['OP_039.csv', 'OP_026.csv', 'OP_016.csv']
-    else:
-        raise ValueError(f"Given seed is not correct!")
-
-    seedset = sorted([os.path.join('Transcripts/', s) for s in seedset])
+    transcript_path = 'Transcripts/'
+    transcript_set = ['OP_005.csv', 'OP_023.csv', 'OP_027.csv', 'OP_040.csv',
+                      'OP_035.csv', 'OP_038.csv', 'OP_013.csv', 'OP_009.csv',
+                      'OP_011.csv', 'OP_007.csv', 'OP_019.csv', 'OP_002.csv',
+                      'OP_039.csv', 'OP_026.csv', 'OP_016.csv']  # 006 -> 500+, 17, 22, 24, 32 --> 230+
+    transcripts = [os.path.join('Transcripts/', s) for s in transcript_set]
 
     # PoCaP
     pocap = PoCaPCorpus(
-        seedset=seedset, target_path=args.target_path, topic_path='ToC/topics.csv')
+        transcripts=transcripts, seed=args.seed_set, target_path=args.target_path, topic_path='ToC/topics.csv')
 
     # Generate Data
     while prefix_idx <= end_idx and error_count < error_patience:
