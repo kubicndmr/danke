@@ -51,8 +51,10 @@ class PoCaPCorpus():
         self.compute_quantiles()
         if len(os.listdir(target_path)) == 0:
             self.seed_target_dir()
-        self.dataset = listdir(self.target_path, '.csv')
-        print('Dataset Len: ', len(self.dataset))
+        self.dataset= ['']*len(self.seedset)
+        for op in listdir(self.target_path, '.csv'):
+            self.add_to_dataset(op)
+        print(f'Dataset Len: {self.index+1}')
 
         self.topic = pd.read_csv(topic_path, index_col=0)
         self.persona = pd.read_csv(persona_path, index_col=0)
@@ -710,7 +712,7 @@ def gen_data(tokenizer, language_model, pocap):
                 # Adapt answer template
                 sub_df['Schritt_Bezeichnung'] = "*Ausfüllen*"
                 sub_df.loc[sub_df['ToC_Bezeichnung'] ==
-                           'T', 'Schritt_Bezeichnung'] = 'Täglich'
+                           'T', 'Schritt_Bezeichnung'] = 'Alltäglich'
                 sub_df.drop(columns=['ToC_Bezeichnung'], inplace=True)
                 sub_df['Text'] = sub_df['Text'].replace(
                     "*fehlende Daten*", "*Ausfüllen*")
@@ -719,7 +721,7 @@ def gen_data(tokenizer, language_model, pocap):
 
                 # Add to prompt
                 prompt += f"\n<Antwort 2>\n{sub_df.to_csv(index=True, sep=';', index_label='Index')}</Antwort 2>\n"
-                prompt += f"""* Strategie: Gib zunächst in der Spalte „Schritt_Name“ den Operationsschritt ein, der deiner Meinung nach durchgeführt werden sollte. Lege deiner Entscheidung die Analyse aus deiner vorherigen Antwort zugrunde und berücksichtige, welche chirurgischen Phasen oder Schritte abgeschlossen sind und welche noch ausstehen. Alle unvollständigen Schritte sollten abgeschlossen werden, bevor die entsprechende chirurgische Phase endet. Achte auf die chronologische Reihenfolge aller chirurgischen Tätigkeiten. Wenn ein chirurgischer Schritt vollständig abgeschlossen ist, sollte er nicht wiederholt werden, oder frühere chirurgische Schritte nicht stattfinden können. Verwende dann nach der Benennung des chirurgischen Schritts die bereitgestellten Hintergrunwissen, um in der Textspalte neue Sätze für den Chirurgen zu erstellen. Wenn häufige Phrasen in den Hintergrundwissen nicht im Abschnitt <Daten 2> verwendet werden, erstelle einen neuen Satz, der von ihnen inspiriert ist. Diese Sätze sollten dem Stil der bestehenden Unterhaltungen entsprechen, aber keine exakten Duplikate sein. Wenn die Sätze im Abschnitt <Daten 2> diese Phrasen bereits enthalten, erstelle einen neuen Satz in deinem Stil. Wenn in der Spalte „Schritt_Bezeichnung“ bereits „Täglich“ steht, erstelle stattdessen einen themenfremden Satz, um ein alltägliches Gespräch mit dem Patienten zu beginnen. Das Thema des Gesprächs ist: {daily_topic}.
+                prompt += f"""* Strategie: Gib zunächst in der Spalte „Schritt_Name“ den Operationsschritt ein, der deiner Meinung nach durchgeführt werden sollte. Lege deiner Entscheidung die Analyse aus deiner vorherigen Antwort zugrunde und berücksichtige, welche chirurgischen Phasen oder Schritte abgeschlossen sind und welche noch ausstehen. Alle unvollständigen Schritte sollten abgeschlossen werden, bevor die entsprechende chirurgische Phase endet. Achte auf die chronologische Reihenfolge aller chirurgischen Tätigkeiten. Wenn ein chirurgischer Schritt vollständig abgeschlossen ist, sollte er nicht wiederholt werden, oder frühere chirurgische Schritte nicht stattfinden können. Verwende dann nach der Benennung des chirurgischen Schritts die bereitgestellten Hintergrunwissen, um in der Textspalte neue Sätze für den Chirurgen zu erstellen. Wenn häufige Phrasen in den Hintergrundwissen nicht im Abschnitt <Daten 2> verwendet werden, erstelle einen neuen Satz, der von ihnen inspiriert ist. Diese Sätze sollten dem Stil der bestehenden Unterhaltungen entsprechen, aber keine exakten Duplikate sein. Wenn die Sätze im Abschnitt <Daten 2> diese Phrasen bereits enthalten, erstelle einen neuen Satz in deinem Stil. Wenn in der Spalte „Schritt_Bezeichnung“ bereits „Alltäglich“ steht, erstelle stattdessen einen themenfremden Satz, um ein alltägliches Gespräch mit dem Patienten zu beginnen. Das Thema des Gesprächs ist: {daily_topic}.
 * Format: Gib deine anwort nur auf Deutsch und im Abschnitt < Antwort 2>. Antwort im CSV-Format wie in der Vorlage <Antwort 2> und verwende immer die Tags <Antwort 2> und </Antwort 2> am Anfang und Ende deiner Antwort."""
 
                 # Generate Answer 1.2
@@ -771,6 +773,7 @@ def gen_data(tokenizer, language_model, pocap):
 
     df_empty_rows = pd.concat(dfs_to_concat)
     df_sample.loc[df_empty_rows.index, 'Text'] = df_empty_rows['Text']
+    df_sample['Text'] = df_sample['Text'].str.strip('*')
     df_sample['Text'] = df_sample['Text'].str.strip('"""')
     assert np.prod(steps_complete) == 1, "Not all steps completed"
 
@@ -779,7 +782,7 @@ def gen_data(tokenizer, language_model, pocap):
     limit_try = 3
     dfs_to_concat = []
     tokens_per_row = 60
-    role = f"Du bist {pocap.sample_persona()}"
+    role = f"Du bist {pocap.sample_persona()} Du führst die Platzierung der Port-Katheter Operationen in einem Krankenhaus in Deutschland."
 
     # Sliding Window
     df_splits = df_splitter(df_sample)
@@ -878,6 +881,7 @@ def gen_data(tokenizer, language_model, pocap):
         'Phase_Bezeichnung': 'Phase_Label'
     })
     result_df['Text'] = result_df['Text'].str.strip()
+    result_df['Text'] = result_df['Text'].str.strip('*')
     result_df['Text'] = result_df['Text'].str.strip('"""')
     result_df['Heritage'] = heritage
     result_df['ToC_Bezeichnung'] = toc_bezeichnung
