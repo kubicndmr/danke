@@ -51,7 +51,7 @@ class PoCaPCorpus():
         self.compute_quantiles()
         if len(os.listdir(target_path)) == 0:
             self.seed_target_dir()
-        self.dataset= ['']*len(self.seedset)
+        self.dataset = ['']*len(self.seedset)
         for op in listdir(self.target_path, '.csv'):
             self.add_to_dataset(op)
         print(f'Dataset Len: {self.index+1}')
@@ -407,9 +407,8 @@ def drop_and_add(df, pocap):
     to_drop = np.zeros(len(count), dtype=int)
     for i, (p, c) in enumerate(zip(percentage, count)):
         if c == 0:
-            pass
-        if c > 0 and c < 3:
-            to_drop[i] = 0
+            to_add[i] = 1
+        elif c > 0 and c < 3:
             to_add[i] = 1
         else:
             d, a = pocap.sample_d_a(i, p, c)
@@ -435,12 +434,14 @@ def drop_and_add(df, pocap):
             empty_row = pd.DataFrame({
                 'Start_Zeit': [np.nan],
                 'Text': [fill_tag],
-                'Phase_Bezeichnung': [np.nan],
+                'Phase_Bezeichnung': [phase],
                 'Heritage': [0],
                 'ToC_Bezeichnung': ['N']
             })
 
-            if len(phase_df) == 1:
+            if phase_df.empty:
+                phase_df = empty_row
+            elif len(phase_df) == 1:
                 phase_df = pd.concat([phase_df, empty_row]
                                      ).reset_index(drop=True)
             else:
@@ -459,6 +460,7 @@ def drop_and_add(df, pocap):
 
     # Update the time column with randomly generated values
     df['Start_Zeit'] = df['Start_Zeit'].apply(pd.to_numeric).ffill()
+    df['Start_Zeit'] = df['Start_Zeit'].apply(pd.to_numeric).bfill()
 
     relaxation = 0.01
     last_phase_end = 0
