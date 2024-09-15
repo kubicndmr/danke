@@ -85,6 +85,7 @@ def gen_data(tokenizer, language_model):
     limit_try = 3
     tokens_per_row = 75
     summary_tokens = 250
+    system_prompt = sdg_prompts.system_prompt
 
     # Get op draft
     df = sdg_helper.draft_OP()
@@ -105,14 +106,20 @@ def gen_data(tokenizer, language_model):
             prompt = sdg_prompts.initial_prompt
             prompt += f"\n<Antwort>\n{sub_df.to_csv(index=True, sep=';', index_label='Index')}</Antwort>\n"
 
-            messages = [{"role": "system", "content": sdg_prompts.system_role},
+            messages = [{"role": "system", "content": system_prompt},
                         {"role": "user", "content": prompt}]
+            messages_log = messages.copy()
+
         else:
-            prompt = sdg_prompts.iteration_prompt
+            step_df = pd.concat(dfs_to_concat)
+            prompt = sdg_prompts.base_prompt + sdg_prompts.data_prompt
+            prompt += f"\n<Daten>\n{step_df.to_csv(index=True, sep=';', index_label='Index')}</Daten>\n"
+            prompt += sdg_prompts.iteration_prompt
             prompt += f"\n<Antwort>\n{sub_df.to_csv(index=True, sep=';', index_label='Index')}</Antwort>\n"
-            
-            messages.append(
-                    {"role": "user", "content": prompt})
+
+            messages = [{"role": "system", "content": system_prompt},
+                        {"role": "user", "content": prompt}]
+            messages_log.append({"role": "user", "content": prompt})
 
         # Try limit_try times, if LM cant follow instructions
         n_try = 0
@@ -143,8 +150,12 @@ def gen_data(tokenizer, language_model):
                 dfs_to_concat.append(sdg_helper.block_to_df(block_answer))
                 
                 # Add to chat
-                messages.append(
-                    {"role": "assistant", "content": '\n'.join(block_answer) + '\n'})
+                summary_answer = sdg_helper.get_tagged_block(
+                    answer, '<Zusammenfassung>', '</Zusammenfassung>')
+                messages_log.append(
+                    {"role": "assistant",
+                     "content": '\n'.join(summary_answer) + '\n\n'.join(block_answer) + '\n'}
+                )
 
                 # Exit loop
                 n_try = limit_try
@@ -160,13 +171,13 @@ def gen_data(tokenizer, language_model):
                 print(f'\t\tConnot genreate Step {i+1}, will try again')
 
     result_df = pd.concat(dfs_to_concat)
-    result_df = result_df[['Index', 'Startzeit', 'Text', 'Step_Label', 'Phase_Label']]
+    result_df = result_df[['Index', 'Startzeit', 'Text', 'Schritt', 'Phase']]
     result_df['Text'] = result_df['Text'].str.strip()
     result_df['Text'] = result_df['Text'].str.strip('*')
     result_df['Text'] = result_df['Text'].str.strip('"""')
     assert np.prod(steps_complete) == 1, "Not all steps completed"
 
-    return result_df, messages
+    return result_df, messages_log
 
 
 ####################################### Main #######################################
@@ -197,7 +208,7 @@ if __name__ == "__main__":
 
     # Parameters
     error_count = 0
-    error_patience = 1
+    error_patience = 3
     prefix_idx = args.prefix_index
     end_idx = prefix_idx + args.num_target - 1
     model_id = 'mistralai/Mistral-Large-Instruct-2407'

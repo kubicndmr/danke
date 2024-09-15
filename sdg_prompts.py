@@ -1,24 +1,14 @@
 import sdg_helper
 
-system_role = f"Du bist ein hilfreicher Assistent, der spricht wie {sdg_helper.sample_persona()} Du führst die Platzierung der Port-Katheter Operationen in einem Krankenhaus in Deutschland."
+system_prompt = f"Du bist ein hilfreicher Assistent, der die Gespräche eines Radiologen im Operationssaal nachahmt. Du bildest Sätze, als ob sie sprechen würden. Jetzt vertretst du: {sdg_helper.sample_persona()}"
 
-initial_prompt = f"""Das Hauptziel ist es, Gespräche eines Radiologe während einer Port-Katheter-Platzierung Operation künstlich zu generieren. Die Radiologen sprechen mit dem medizinischen Assistenten und dem Patienten die Operation zu koordinieren, den Zustand des Patienten zu überwachen, präziser Operationstechniken zicherzustellen, Probleme in Echtzeit zu lösen, Patienten zu beruhigen oder chirurgische Aktionen zu dokumentieren. 
-Die neu generierten Daten werden für das Training eines textbasierten Deep-Learning-Modells verwendet, das entwickelt wurde, um die chirurgischen Phasen der Port-Katheter-Placement-Operation zu erkennen.
+base_prompt = f"""Dein Ziel ist es, realistische Gespräche eines Radiologen im Operationssaal während einer Port-Katheter-Platzierung zu führen. 
 
-* Beispieldaten: Du wirst Gespräche des Radiologen künstlich in deinem eigenen Stil erzeugen. Der Radiologe meint den Chirurg. In diesem Abschnitt erhaltst du einige Beispieldaten von echten Operationen mit <Beispieldaten>-Tags. Analysiere diese Daten, um den Operationsstil, die chirurgischen Aktivitäten und die Umgebung im Operationssaal kennenzulernen.
-{sdg_helper.sample_seed_OPs(N=3)}
+* Kontext: Du wirst die Gespräche mit den Stil des vorgegebenen Radiologen erzeugen. Der Radiologe meint hier den Chirurg, der die Operation durchführt. 
+Die Radiologen sprechen während der Operation typischerweise mit dem medizinischen Assistenten und dem Patienten die Operation zu koordinieren, den Zustand des Patienten zu überwachen, präziser Operationstechniken zicherzustellen, Probleme in Echtzeit zu lösen, Patienten zu beruhigen oder chirurgische Aktionen zu dokumentieren.
+Die neu generierten Gesprächdaten werden für das Training eines textbasierten Deep-Learning-Modells verwendet, das entwickelt wurde, um die chirurgischen Phasen der Port-Katheter-Placement-Operation zu erkennen.
 
-* Operation: Chirurgische Phasen und chirurgische Schritte darstellen eine typische Operation. Die Phasen beziehen sich auf die großen Abschnitte des Verfahrens, in denen die wichtigsten Schritte beschrieben werden. Chirurgische Schritte sind die spezifischen Aufgaben, die innerhalb jeder Phase ausgeführt werden sollen. Operationen folgen im Allgemeinen dieser Reihenfolge der Ereignisse, mit Ausnahmen. Die Phasen und Schritte der Port-Katheter-Platzierung Operation sind folgendes:
-    - Phase 0: Vorbereitung. Schritte: 0.1) Positionierung des Patienten auf dem Tisch 0.2) Tisch fährt hoch 0.3) Radiologe sterilisiert sich 0.4) Vorbereitung des sterilen Materials 0.5) Patient steril abgedeckt
-    - Phase 1: Punktion. Schritte: 1.1) Lokale Anästhesie, 1.2 Ultraschallgeführte Punktion
-    - Phase 2: Führungsdraht. Schritte: 2.1) Röntgenmaschine fährt ein, 2.2) Durchleuchtung im Bereich der Subklavia, 2.3) Durchleuchtung im Bereich der Vena cava inferior (VCI), 2.4) Röntgenmaschine fährt heraus
-    - Phase 3: Pouchvorbereitung-und-Katheterplatzierung. Schritte: 3.1) Lokale Anästhesie, 3.2) Inzision, 3.3) Pouch-Vorbereitung 3.4) Hülleplatzierung
-    - Phase 4: Katheterpositionierung. Schritte: 4.1) Röntgenmaschine fährt ein, 4.2) Durchleuchtung des VCI-Bereichs, 4.3) Positionierung des Katheters
-    - Phase 5: Katheteranpassung. Schritte: 5.1) Kürzen des Katheters, 5.2) Röntgenmaschine fährt aus, 5.3) Anschluss des Katheters an die Portkapsel, 5.4) Positionierung der Portkapsel im Pouch, 5.5) Chirurgische Naht, 5.6) Punktion der Portkapsel
-    - Phase 6: Katheterkontrolle. Schritte: 6.1) Röntgenmaschine fährt ein, 6.2) Digitale Subtraktionsangiographie des Brust 6.3) Röntgenmaschine fährt in Parkposition aus
-    - Phase 7: Abschluss. Schritte: 7.1) Steriles Pflaster auflegen, 7.2) Tisch fährt nach unten
-
-Zweck und Ziel der einzelnen chirurgischen Schritte sind wie folgt:
+* Operation: Chirurgische Phasen und chirurgische Schritte darstellen eine typische Operation. Die Phasen beziehen sich auf die großen Abschnitte des Verfahrens, in denen die wichtigsten Schritte beschrieben werden. Chirurgische Schritte sind die spezifischen Aufgaben, die innerhalb jeder Phase ausgeführt werden sollen. Operationen folgen im Allgemeinen dieser Reihenfolge der Ereignisse. Die Phasen und Schritte der Port-Katheter-Platzierung Operation sind folgendes:
     - Phase 0: Vorbereitung. Schritt 0.1 Positionierung des Patienten auf dem Tisch: Der Patient wird in eine stabile, komfortable Position gebracht, meist in Rückenlage. Dies ist wichtig für den Zugang zu den Venen und die Sicherheit während der Operation.
     - Phase 0: Vorbereitung. Schritt 0.2 Tisch fährt hoch: Der Operationstisch wird auf eine ergonomische Höhe für den Chirurgen und Radiologen gebracht, um den Eingriff effizient durchzuführen.
     - Phase 0: Vorbereitung. Schritt 0.3 Radiologe (Chirurg) sterilisiert sich: Der Radiologe, der die Operation übernimmt, bereitet sich durch Sterilisation und Anziehen steriler Kleidung vor, um Infektionen zu verhindern.
@@ -49,7 +39,7 @@ Zweck und Ziel der einzelnen chirurgischen Schritte sind wie folgt:
     - Phase 7: Abschluss. Schritt 7.1 Steriles Pflaster auflegen: Über der Naht wird ein steriles Pflaster angebracht, um die Wunde zu schützen.
     - Phase 7: Abschluss. Schritt 7.2 Tisch fährt nach unten: Der Operationstisch wird abgesenkt, um den Patienten sicher vom Tisch zu transferieren.
 
-* Satzgruppen: Durch die Analyse von Gesprächen von Radiologen (Chirurgen) im Operationssaal während Dutzender von Operationen zur Platzierung von Portkathetern wurden häufig verwendete Ausdrücke extrahiert und gruppiert. Diese Satzgruppen sind unten aufgeführt:
+* Satzgruppen: Häufig verwendete Ausdrücke der Radiologen bei realen Operationen in einem deutschen Krankenhaus wurden extrahiert und gruppiert. Für jede chirurgische Phase werden im Folgenden Satzgruppen mit drei Beispielsätzen und der Anzahl des Vorkommens im Datensatz angegeben:
     - In der Phase Vorbereitung: fünf Mal Aussagen wie 1) 'Nicht hinlangen, keine Angst, ich mache es gleich so, dass Sie wieder rausschauen.' 2) 'Ich decke Sie mal ein bisschen zu, aber ich mache es sofort wieder weg.' 3) 'Ich gehe mal kurz über die Augen, deswegen bitte kurz die Augen schließen.' wurden vor der Tuchabdeckung geäußert, um den Patienten zu beruhigen. Fünf Mal Aussagen wie 1) 'Nehmen Sie mal das sterile Tuch.' 2) 'Ich decke Sie gleich mit einem OP-Tuch ab.' 3) 'Wir legen jetzt schon mal ein steriles Tuch bei Ihnen auf.' wurden geäußert, um den Patienten über den bevorstehenden Schritt „0.5) Patient steril abgedeckt“ zu informieren.
     - In der Phase Punktion: 35 Mal Aussagen ähnlich wie 1) "Bitte pressen Sie kräftig in den Bauch, als ob Sie auf die Toilette müssten.", 2) "Nochmal kräftig in den Bauch reinpressen, bitte." 3)"Einatmen, ausatmen und dann kräftig in den Bauch pressen." und sieben Mal Aussagen ähnlich wie 1) "Bitte atmen Sie tief ein." 2)"Halten Sie die Luft an." 3) "Atmen Sie langsam weiter." wurden während des chirurgischen Schritts '1.2 Ultraschallgeführte Punktion' geäußert, um die Punktionsstelle besser sichtbar zu machen.
     - In der Phase Führungsdraht: sieben Mal Aussagen ähnlich wie 1) "Bitte blenden Sie oben und unten auf." 2) "Blenden Sie links und rechts ein." 3) "Blenden Sie oben, unten, links und rechts ein." vor oder während der Röntgenaufnahme geäußert, um den Kollimator mithilfe der Assistentin zu steuern. Vier Mal Aussagen ähnlich wie 1) "Wir haben den schwierigen Schritt geschafft und sind in die Vene gekommen." 2) "Wir sind bereits in der Vene, das hat super geklappt." 3) "Den schwierigen Schritt haben wir geschafft, jetzt wird es noch ein bisschen pieksen." wurden geäußert, um den Patienten darüber zu informieren, dass die Phase 'Führungsdraht' zu Ende gekommen ist.
@@ -58,27 +48,30 @@ Zweck und Ziel der einzelnen chirurgischen Schritte sind wie folgt:
     - In der Phase Katheteranpassung: 43 Mal Aussagen wie 1) "Bitte atmen Sie tief ein und halten Sie die Luft an." 2) "Atmen Sie ganz tief aus und pressen Sie alles raus." 3) "Atmen Sie ruhig und halten Sie die Luft an, wenn ich es sage." wurden während der Röntgenaufnahme geäußert, um die Durchleuchtungsstelle leichter erkennbar zu machen.
     - In der Phase Katheterkontrolle 21 Mal Aussagen wie 1) "Bitte atmen Sie tief ein und halten Sie die Luft an." 2) "Halten Sie die Luft an und bewegen Sie sich nicht." 3) "Sie bekommen gleich ein Atemkommando, bitte atmen Sie tief ein und halten Sie die Luft an." wurden während der Röntgenaufnahme geäußert, um die Durchleuchtungsstelle leichter erkennbar zu machen.
     - In der Phase Abschluss: neun Mal Aussagen wie 1) "Wir kleben jetzt ein Pflaster darauf." 2) "Das Pflaster kann später einfach abgezogen werden." 3) "Sie bekommen ein Ersatzpflaster mit." wurden geäußert, um den Patient über den Schritt '7.1) Steriles Pflaster auflegen' zu informieren.
+    
+    Achte darauf, ähnliche Ausdrücke zu verwenden, wenn sie bei der Bildung von Sätzen natürlich in den Kontext passen. Bevor du sie verwendest, solltest du jedoch bedenken, wie oft diese Ausdrücke normalerweise im Datensatz vorkommen. Dies wird dazu beitragen, dass der Text realistischer wirkt.
 
-* Daten: Du erhältst einen Datensatz mit fehlenden Unterhaltungen im Abschnitt <Antwort>. Die Daten enthalten einen Index, die Startzeit der Rede, den gesprochenen Satz eines Chirurgen, Bezeichnungen für die laufende Operationsschritte und die Operationsphase.
+* Daten: Du erhältst einen Datensatz mit fehlenden Unterhaltungen im Abschnitt <Antwort>. Die Daten enthalten einen Index, die Startzeit der Rede, den gesprochenen Satz eines Radilogen, Bezeichnungen für die laufende Operationsschritte und die Operationsphase.
 
-* Aufgabe: Du wirst die fehlenden Konversationen der Radiologen mit den Assistenten oder Patienten im Abschnitt <Antwort>, die mit '*Ausfüllen*' markiert sind, ergänzen. Du berücksichtigst die chirurgischen Phasen und Schritte und sprichst mit den Stil des vorgegebenen Radiologen.
+* Aufgabe: Du wirst die Konversationen der Radiologen mit den Assistenten oder Patienten im Abschnitt <Antwort>, die mit '*Ausfüllen*' markiert sind, ergänzen. Du berücksichtigst die chirurgischen Phasen und Schritte und sprichst mit den Stil des vorgegebenen Radiologen.
 
 * Strategie: Zunächst fasst du deine Aufgabe in dem Abschnitt <Zusammenfassung> zusammen. Du wirst dann die Konversationen des gesamten Operation Teil für Teil erstellen. In diesem Teil wirst du die Daten für den angegebenen Abschnitt in der Vorlage <Antwort> generieren. Um sicherzustellen, dass die generierten Sätze medizinisch korrekt sind, verwende die in den Spalten 'Schritt' und 'Phase' angegebenen Informationen und generiere geeignete Gespräche. Betrachte auch die angegebenen Satzgruppen, um sich inspirieren zu lassen. Wenn in der Spalte 'Schritt' bereits 'Alltäglich' steht, erstelle stattdessen einen themenfremden Satz, um ein alltägliches Gespräch mit dem Patienten zu beginnen. Das Thema des Gesprächs ist: {sdg_helper.sample_daily_topic()}.
 
 * Format: Verwende die Vorlage im Abschnitt <Antwort> um deine Antwort zu geben und die Vorlage im Abschnitt <Zusammenfassung> um deine Zusammenfassung zu geben. Gib deine anwort nur auf Deutsch und nutze CSV-Format im Abschnitt <Antwort> wie in der Vorlage. Verwende immer die Tags <Antwort> und </Antwort> am Anfang und Ende deiner Antwort, und <Zusammenfassung> und </Zusammenfassung> am Anfang und Ende deiner Zusammenfassung.
-<Zusammenfassung>
-Schreib hier
-    1. den Namen der Operation
-    2. Name und persönlicher Sprachstil des Radiologen
-    3. chirurgische Schritte im angegebenen Datenbereich, die durchgeführt werden sollen
-<\Zusammenfassung>
 """
 
-iteration_prompt = """In diesem Teil wirst du mit der Generierung des nächsten Abschnitts der Operationsdaten fortfahren. Zunächst fasst du deine Aufgabe in dem Abschnitt <Zusammenfassung> zusammen. Fülle dann die angegebenen Daten im Abschnitt <Antwort> aus. Berücksichtige deine vorherige Antworte um konsistente Konversionen zu generieren.
+data_prompt = "\n* Fortschritt: Der aktuelle Stand der Datengenerierung ist wichtig, um den Kontext des laufenden Gesprächs zu verstehen und Wiederholungen zu vermeiden. Bislang ist die Generierung des folgenden Datenteils abgeschlossen:"
+
+step_prompt = """\nIn diesem Teil wirst du mit der Generierung des nächsten Abschnitts der Operationsdaten fortfahren. Zunächst fasst du deine Aufgabe in dem Abschnitt <Zusammenfassung> zusammen. Fülle dann die angegebenen Daten im Abschnitt <Antwort> aus. Berücksichtige deine vorherige Antworte um konsistente Konversionen zu generieren."""
+
+summary_prompt = """
 <Zusammenfassung>
 Schreib hier
     1. den Namen der Operation
     2. Name und persönlicher Sprachstil des Radiologen
     3. chirurgische Schritte im angegebenen Datenbereich, die durchgeführt werden sollen
-<\Zusammenfassung>
+</Zusammenfassung>
 """
+
+initial_prompt = base_prompt + summary_prompt
+iteration_prompt = step_prompt + summary_prompt
