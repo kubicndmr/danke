@@ -68,6 +68,7 @@ def get_answer(tokenizer, language_model, messages, max_new_tokens,
 
     # Decode the model's output and update the chat history
     response = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    response = sdg_helper.extract_model_response(response)
 
     # Output
     if DEBUG_MODE:
@@ -112,6 +113,10 @@ def gen_data(tokenizer, language_model):
 
         else:
             step_df = pd.concat(dfs_to_concat)
+            step_df['Text'] = step_df['Text'].str.strip()
+            step_df['Text'] = step_df['Text'].str.strip('*')
+            step_df['Text'] = step_df['Text'].str.strip('"""')
+    
             prompt = sdg_prompts.base_prompt + sdg_prompts.data_prompt
             prompt += f"\n<Daten>\n{step_df.to_csv(index=True, sep=';', index_label='Index')}</Daten>\n"
             prompt += sdg_prompts.iteration_prompt
@@ -150,12 +155,8 @@ def gen_data(tokenizer, language_model):
                 dfs_to_concat.append(sdg_helper.block_to_df(block_answer))
                 
                 # Add to chat
-                summary_answer = sdg_helper.get_tagged_block(
-                    answer, '<Zusammenfassung>', '</Zusammenfassung>')
                 messages_log.append(
-                    {"role": "assistant",
-                     "content": '\n'.join(summary_answer) + '\n\n'.join(block_answer) + '\n'}
-                )
+                    {"role": "assistant", "content": answer})
 
                 # Exit loop
                 n_try = limit_try
@@ -171,7 +172,7 @@ def gen_data(tokenizer, language_model):
                 print(f'\t\tConnot genreate Step {i+1}, will try again')
 
     result_df = pd.concat(dfs_to_concat)
-    result_df = result_df[['Index', 'Startzeit', 'Text', 'Schritt', 'Phase']]
+    result_df = result_df[['Startzeit', 'Text', 'Schritt', 'Phase']]
     result_df['Text'] = result_df['Text'].str.strip()
     result_df['Text'] = result_df['Text'].str.strip('*')
     result_df['Text'] = result_df['Text'].str.strip('"""')

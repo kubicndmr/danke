@@ -1,12 +1,10 @@
 import sdg_helper
 
-system_prompt = f"Du bist ein hilfreicher Assistent, der die Gespräche eines Radiologen im Operationssaal nachahmt. Du bildest Sätze, als ob sie sprechen würden. Jetzt vertretst du: {sdg_helper.sample_persona()}"
+system_prompt = f"Du bist ein hilfreicher Assistent, der die Gespräche eines Radiologen im Operationssaal nachahmt. Du bildest Sätze, als ob er sprechen würde. Jetzt vertretst du: {sdg_helper.sample_persona()}"
 
 base_prompt = f"""Dein Ziel ist es, realistische Gespräche eines Radiologen im Operationssaal während einer Port-Katheter-Platzierung zu führen. 
 
-* Kontext: Du wirst die Gespräche mit den Stil des vorgegebenen Radiologen erzeugen. Der Radiologe meint hier den Chirurg, der die Operation durchführt. 
-Die Radiologen sprechen während der Operation typischerweise mit dem medizinischen Assistenten und dem Patienten die Operation zu koordinieren, den Zustand des Patienten zu überwachen, präziser Operationstechniken zicherzustellen, Probleme in Echtzeit zu lösen, Patienten zu beruhigen oder chirurgische Aktionen zu dokumentieren.
-Die neu generierten Gesprächdaten werden für das Training eines textbasierten Deep-Learning-Modells verwendet, das entwickelt wurde, um die chirurgischen Phasen der Port-Katheter-Placement-Operation zu erkennen.
+* Kontext: Du wirst die Gespräche mit den Stil des vorgegebenen Radiologen erzeugen. Der Radiologe meint hier den Chirurg, der die Operation durchführt. Die neu generierten Gesprächdaten werden für das Training eines textbasierten Deep-Learning-Modells verwendet, das entwickelt wurde, um die chirurgischen Phasen der Port-Katheter-Placement-Operation zu erkennen.
 
 * Operation: Chirurgische Phasen und chirurgische Schritte darstellen eine typische Operation. Die Phasen beziehen sich auf die großen Abschnitte des Verfahrens, in denen die wichtigsten Schritte beschrieben werden. Chirurgische Schritte sind die spezifischen Aufgaben, die innerhalb jeder Phase ausgeführt werden sollen. Operationen folgen im Allgemeinen dieser Reihenfolge der Ereignisse. Die Phasen und Schritte der Port-Katheter-Platzierung Operation sind folgendes:
     - Phase 0: Vorbereitung. Schritt 0.1 Positionierung des Patienten auf dem Tisch: Der Patient wird in eine stabile, komfortable Position gebracht, meist in Rückenlage. Dies ist wichtig für den Zugang zu den Venen und die Sicherheit während der Operation.
@@ -57,6 +55,8 @@ Die neu generierten Gesprächdaten werden für das Training eines textbasierten 
 
 * Strategie: Zunächst fasst du deine Aufgabe in dem Abschnitt <Zusammenfassung> zusammen. Du wirst dann die Konversationen des gesamten Operation Teil für Teil erstellen. In diesem Teil wirst du die Daten für den angegebenen Abschnitt in der Vorlage <Antwort> generieren. Um sicherzustellen, dass die generierten Sätze medizinisch korrekt sind, verwende die in den Spalten 'Schritt' und 'Phase' angegebenen Informationen und generiere geeignete Gespräche. Betrachte auch die angegebenen Satzgruppen, um sich inspirieren zu lassen. Wenn in der Spalte 'Schritt' bereits 'Alltäglich' steht, erstelle stattdessen einen themenfremden Satz, um ein alltägliches Gespräch mit dem Patienten zu beginnen. Das Thema des Gesprächs ist: {sdg_helper.sample_daily_topic()}.
 
+* Stil: Du bildest realistische Sätze, als ob der Radiologe mit dem Patienten oder dem Assistenten sprechen würde. Bevor du einen Satz ausgibst, entscheide zunächst, mit wem der Radiloge sprechen könnte. Du kannst einen Satz auch in mehrere Zeilen aufteilen. Er spricht typischerweise um die Operation zu koordinieren, den Zustand des Patienten zu überwachen, Operationstechniken zicherzustellen, Patienten zu beruhigen oder chirurgische Aktionen zu dokumentieren. 
+
 * Format: Verwende die Vorlage im Abschnitt <Antwort> um deine Antwort zu geben und die Vorlage im Abschnitt <Zusammenfassung> um deine Zusammenfassung zu geben. Gib deine anwort nur auf Deutsch und nutze CSV-Format im Abschnitt <Antwort> wie in der Vorlage. Verwende immer die Tags <Antwort> und </Antwort> am Anfang und Ende deiner Antwort, und <Zusammenfassung> und </Zusammenfassung> am Anfang und Ende deiner Zusammenfassung.
 """
 
@@ -70,6 +70,7 @@ Schreib hier
     1. den Namen der Operation
     2. Name und persönlicher Sprachstil des Radiologen
     3. chirurgische Schritte im angegebenen Datenbereich, die durchgeführt werden sollen
+    4. Welche Satzgruppen könnten relevant sein?
 </Zusammenfassung>
 """
 

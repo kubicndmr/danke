@@ -52,7 +52,23 @@ def listdir(path, ending=None):
                        if f.endswith(ending)])
 
 
-def get_tagged_block(text, start_tag, end_tag):
+def extract_model_response(answer, instruction_tag='[/INST]'):
+    model_response = []
+    response_flag = False
+    
+    for line in answer.splitlines():
+        if instruction_tag in line:
+            response_flag = True
+            if line.startswith(instruction_tag):
+                line = line[len(instruction_tag):]
+                line = line.strip()
+        if response_flag:
+            model_response.append(line)
+            
+    return '\n'.join(model_response)
+
+
+def get_tagged_block(answer, start_tag, end_tag):
     """
     Extracts and returns the last block of text that is enclosed between specified start and end tags.
 
@@ -66,7 +82,8 @@ def get_tagged_block(text, start_tag, end_tag):
     """
     block = []
     tag_flag = False
-    for line in text.splitlines():
+    
+    for line in answer.splitlines():
         line = line.strip()
         if start_tag in line:
             index = start_tag.find(line)
@@ -84,6 +101,18 @@ def get_tagged_block(text, start_tag, end_tag):
         if tag_flag:
             if line != '':
                 block.append(line)
+    
+    if len(block) == 0:
+        search_open = True
+        for line in reversed(answer.split('\n')):
+            if line != '':
+                if line[0].isdigit() and search_open:
+                    block.append(line)
+                if line.startswith('Index'):
+                    block.append(line)
+                    search_open = False
+        block = [b for b in reversed(block)]
+        
     return block
 
 
@@ -164,7 +193,7 @@ def merge_small_groups(groups, min_size=6):
     return merged_groups
 
 
-def df_splitter(df, max_df_length=10):
+def df_splitter(df, max_df_length=20):
     split_dfs = []
 
     for _, split_df in df.groupby('Phase'):
