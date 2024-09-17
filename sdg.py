@@ -162,10 +162,11 @@ def gen_data(tokenizer, language_model):
                 n_try = limit_try
                 steps_complete[i] = 1
                 
-                with open(f'step_1_{i+1}.txt', 'w') as f:
-                        for m in messages:
-                            f.write('\n'+'*'*50+' <'+m['role']+'> '+'*'*50+'\n')
-                            f.write(m['content'])
+                if DEBUG_MODE:
+                    with open(f'step_1_{i+1}.txt', 'w') as f:
+                            for m in messages:
+                                f.write('\n'+'*'*50+' <'+m['role']+'> '+'*'*50+'\n')
+                                f.write(m['content'])
 
             except:
                 n_try += 1
@@ -173,6 +174,7 @@ def gen_data(tokenizer, language_model):
 
     result_df = pd.concat(dfs_to_concat)
     result_df = result_df[['Startzeit', 'Text', 'Schritt', 'Phase']]
+    result_df['Phase_Label'] = result_df['Phase'].map(sdg_helper.reversed_surgical_phases)
     result_df['Text'] = result_df['Text'].str.strip()
     result_df['Text'] = result_df['Text'].str.strip('*')
     result_df['Text'] = result_df['Text'].str.strip('"""')

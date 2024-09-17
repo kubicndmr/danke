@@ -64,11 +64,11 @@ if __name__ == '__main__':
     wandb.config.update(args)
     
     ## Data
-    trainset, validset, testset = data.get_dataset('/DATA/kubi/PoCaP/',
+    trainset, validset, testset = data.get_dataset('SynPoCaP/',#'/DATA/kubi/PoCaP/',
                                                    log_txt,
-                                                   args.batch_size,
+                                                   args.batch_size)
                                                    #None)
-                                                   '/DATA/kubi/SynPoCaP/')
+                                                   #'/DATA/kubi/SynPoCaP/')
     num_classes = 9
     
     ## Model

@@ -162,7 +162,7 @@ def data_split(data_path, log_txt='log.txt', split=0.2, synthetic_data_path=None
     # count phases    
     phase_count = np.zeros((len(dataset), 8))
     for i, d in enumerate(dataset):
-        df = pd.read_pickle(os.path.join(data_path, d))
+        df = pd.read_pickle(d)
         array_count = np.zeros(8, dtype=int)
         phases = df['Phase_Label'].value_counts().drop(8, errors='ignore')
         array_count[phases.index] = phases.values
