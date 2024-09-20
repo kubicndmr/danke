@@ -1,8 +1,10 @@
 import sdg_helper
 
-system_prompt = f"Du bist ein hilfreicher Assistent, der die Gespräche eines Radiologen im Operationssaal nachahmt. Du bildest Sätze, als ob er sprechen würde. Jetzt vertretst du: {sdg_helper.sample_persona()}"
+def get_system_prompt():
+    return f"Du bist ein hilfreicher Assistent, der die Gespräche eines Radiologen im Operationssaal nachahmt. Du bildest Sätze, als ob er sprechen würde. Jetzt vertretst du: {sdg_helper.sample_persona()}"
 
-base_prompt = f"""Dein Ziel ist es, realistische Gespräche eines Radiologen im Operationssaal während einer Port-Katheter-Platzierung zu führen. 
+def get_base_prompt():
+    return f"""Dein Ziel ist es, realistische Gespräche eines Radiologen im Operationssaal während einer Port-Katheter-Platzierung zu führen. 
 
 * Kontext: Du wirst die Gespräche mit den Stil des vorgegebenen Radiologen erzeugen. Der Radiologe meint hier den Chirurg, der die Operation durchführt. Die neu generierten Gesprächdaten werden für das Training eines textbasierten Deep-Learning-Modells verwendet, das entwickelt wurde, um die chirurgischen Phasen der Port-Katheter-Placement-Operation zu erkennen.
 
@@ -74,5 +76,4 @@ Schreib hier
 </Zusammenfassung>
 """
 
-initial_prompt = base_prompt + summary_prompt
 iteration_prompt = step_prompt + summary_prompt

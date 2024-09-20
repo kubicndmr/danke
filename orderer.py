@@ -41,6 +41,7 @@ def split_and_copy(from_csv, to_csv):
 
     df_divided = pd.DataFrame(rows_list)
     df_divided = df_divided.reset_index(drop=True)
+    df_divided['Phase_Label'] = df_divided['Phase_Label'].astype(int)
     df_divided.to_csv(to_csv)
 
 

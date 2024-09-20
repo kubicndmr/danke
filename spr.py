@@ -7,10 +7,6 @@ import metrics
 import argparse
 import numpy as np
 
-np.random.seed(1)
-torch.manual_seed(1)
-torch.cuda.manual_seed(1)
-
 if __name__ == '__main__':
     ## Args
     parser = argparse.ArgumentParser(
@@ -31,7 +27,7 @@ if __name__ == '__main__':
                         help='batch size of training data')
     
     parser.add_argument('-d', '--dropout_prob', 
-                        type=float, default=0,
+                        type=float, default=0.4,
                         help='probability of dropping neural connection')
     
     parser.add_argument('-l', '--learning_rate', 
@@ -64,19 +60,17 @@ if __name__ == '__main__':
     wandb.config.update(args)
     
     ## Data
-    trainset, validset, testset = data.get_dataset('SynPoCaP/',#'/DATA/kubi/PoCaP/',
+    trainset, validset, testset = data.get_dataset('Dataset',
+                                                   'synthetic',
                                                    log_txt,
-                                                   args.batch_size)
-                                                   #None)
-                                                   #'/DATA/kubi/SynPoCaP/')
+                                                   args.batch_size,
+                                                   num_train_ops=40)
     num_classes = 9
     
     ## Model
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     surgical_model = model.SLPNet(
         model_dim=args.model_dim,
-        num_head=args.num_head,
-        num_encoder=args.num_enc,
         num_classes=num_classes,
         dropout_prob=args.dropout_prob
     ).to(device)
@@ -101,8 +95,8 @@ if __name__ == '__main__':
     metrics_valid = metrics.SPRMetrics(log_txt, output_path, args.epochs)
     error_train = torch.zeros(args.epochs).to(device)
     error_valid = torch.zeros(args.epochs).to(device)
-    early_stopper = False
-    patience_limit = 20
+    early_stopper_flag = False
+    patience_limit = 5
     patience_escb = 0
     delta_escb = 0.001
     best_loss = 1E9
@@ -112,7 +106,7 @@ if __name__ == '__main__':
     validset_size = np.sum([d_l.dataset.__len__() for d_l in validset])
     
     # Iter epochs
-    while (epoch < args.epochs) and (early_stopper == False):
+    while (epoch < args.epochs) and (early_stopper_flag == False):
         utils.print_log(
             "\n\nEpoch\t: {}/{}".format(epoch+1, args.epochs), 
             log_txt,
@@ -201,7 +195,7 @@ if __name__ == '__main__':
         if error_valid[epoch] > best_loss + delta_escb:    
             patience_escb += 1
         if patience_escb > patience_limit:
-            early_stopper = True
+            early_stopper_flag = True
             utils.print_log('Early Stopper!!!\n', log_txt, display=True)
             
         epoch += 1

@@ -3,6 +3,7 @@ import yaml
 import math
 import time
 import torch
+import random
 import shutil
 import matplotlib
 import numpy as np
@@ -14,12 +15,13 @@ from scipy.stats import entropy
 
 
 plt.rcParams["font.family"] = "Times New Roman"
-FIG_DPI=50
+FIG_DPI = 50
 
-def prefix(id, name = '', buffer = 3):
+
+def prefix(id, name='', buffer=3):
     '''
     Creates prefix padded with zeros, e.g., name001
-    
+
     id              : int
                         Number to be padded
 
@@ -32,11 +34,11 @@ def prefix(id, name = '', buffer = 3):
     return name + str(id).zfill(buffer)
 
 
-def print_log(text, file_name = 'log.txt', 
-              ends_with = '\n', display = False):
+def print_log(text, file_name='log.txt',
+              ends_with='\n', display=False):
     '''
     Prints output to the log file.
-    
+
     text        : string or List               
                         Output text
 
@@ -49,13 +51,13 @@ def print_log(text, file_name = 'log.txt',
     display     : Bool
                         Wheter print to screen or not.
     '''
-    
+
     if display:
-        print(text, end = ends_with)
+        print(text, end=ends_with)
 
     with open(file_name, "a") as text_file:
-        print(text, end = ends_with, file = text_file)
-        
+        print(text, end=ends_with, file=text_file)
+
 
 def init_log(args):
     """
@@ -69,22 +71,21 @@ def init_log(args):
     os.makedirs(output_dir+"results/")
     os.makedirs(output_dir+"results/ribbons/")
     print("Output dir-->", output_dir)
-    
+
     # backup
     for f in os.listdir("./"):
         if f.endswith(".py"):
             shutil.copyfile(f, output_dir+"/code/"+f)
     save_args(args, output_dir+"results/args.yaml")
 
-
     # log txt
     log_txt = os.path.join(output_dir, "log.txt")
-    print_log('\n\tTraining "{}" started at: {} \n'.format(args.training_tag, 
-                                                           start_time.strftime('%d-%m-%Y %H:%M:%S')), 
-                                                           log_txt)
-    print_log('GPU: {}'.format(torch.cuda.get_device_name()), 
+    print_log('\n\tTraining "{}" started at: {} \n'.format(args.training_tag,
+                                                           start_time.strftime('%d-%m-%Y %H:%M:%S')),
               log_txt)
-    print_log('Properties: {}\n'.format(torch.cuda.get_device_properties("cuda")), 
+    print_log('GPU: {}'.format(torch.cuda.get_device_name()),
+              log_txt)
+    print_log('Properties: {}\n'.format(torch.cuda.get_device_properties("cuda")),
               log_txt)
 
     return output_dir, log_txt
@@ -92,14 +93,14 @@ def init_log(args):
 
 def remove_tailzeros(arr):
     """Remove trailing zeros from a 1D NumPy array."""
-    if isinstance(arr, np.ndarray):    
+    if isinstance(arr, np.ndarray):
         last_nonzero = np.nonzero(arr)[0]
         if len(last_nonzero) == 0:
             return np.array([])
         else:
             return arr[:last_nonzero[-1] + 1]
     """Remove trailing zeros from a torch array."""
-    if isinstance(arr, torch.Tensor):    
+    if isinstance(arr, torch.Tensor):
         last_nonzero = torch.nonzero(arr, as_tuple=True)[0]
         if len(last_nonzero) == 0:
             return torch.tensor([])
@@ -107,7 +108,7 @@ def remove_tailzeros(arr):
             return arr[:(last_nonzero[-1].item() + 1)]
 
 
-def time2sec(time_str, return_ms = False):
+def time2sec(time_str, return_ms=False):
     '''
     Converts hh:mm:ss or hh:mm:ss,ms
     to seconds or miliseconds
@@ -128,7 +129,7 @@ def time2sec(time_str, return_ms = False):
         minutes = int(time_str.split(":")[1])
         seconds = int(time_str.split(":")[2])
         miliseconds = 0
-    
+
     total_seconds = hours * 3600 + minutes * 60 + seconds
 
     if return_ms:
@@ -137,89 +138,59 @@ def time2sec(time_str, return_ms = False):
         return total_seconds
 
 
-def listdir(path, ending = None):
+def listdir(path, ending=None):
     '''Returns dir with full path'''
     if ending == None:
         return sorted([os.path.join(path, f) for f in os.listdir(path)])
     else:
-        return sorted([os.path.join(path, f) for f in os.listdir(path) 
+        return sorted([os.path.join(path, f) for f in os.listdir(path)
                        if f.endswith(ending)])
-    
+
 
 def save_args(args, filename):
     # Convert the argparse Namespace to a dictionary
     params = vars(args)
-    
+
     # Save the dictionary to a YAML file
     with open(filename, 'w') as file:
         yaml.dump(params, file, default_flow_style=False)
-    
 
-def data_split(data_path, log_txt='log.txt', split=0.2, synthetic_data_path=None):
-    # read data path
-    dataset = listdir(data_path, '.pkl')
-        
-    # count phases    
-    phase_count = np.zeros((len(dataset), 8))
-    for i, d in enumerate(dataset):
-        df = pd.read_pickle(d)
-        array_count = np.zeros(8, dtype=int)
-        phases = df['Phase_Label'].value_counts().drop(8, errors='ignore')
-        array_count[phases.index] = phases.values
-        phase_count[i,:] = array_count
 
-    # create df
-    data = {
-        'op': dataset, 
-        'percentage': list(phase_count/np.sum(phase_count, axis=0))
-    }
-    df = pd.DataFrame(data)
-    
-    # compute entropy
-    df['H'] = df['percentage'].apply(lambda x: entropy(x, base = 2))
-    
-    # sort according to entropy
-    df.sort_values(by='H', inplace=True, ascending=False, ignore_index=True)    
+def data_split(data_path, train_mode, log_txt, num_train_ops=None):
+    if train_mode == 'real':
+        trainset = listdir(os.path.join(data_path, 'Train_PoCaP'))
+    elif train_mode == 'synthetic':
+        trainset = listdir(os.path.join(data_path, 'Train_SynPoCaP'))
+    elif train_mode == 'mix':
+        real = listdir(os.path.join(data_path, 'Train_PoCaP'))
+        syn = listdir(os.path.join(data_path, 'Train_SynPoCaP'))
+        trainset = real + syn
 
-    # compute testset size
-    if len(dataset)%2 == 0:
-        testset_size = math.ceil(len(dataset)*(split))
-    else:
-        testset_size = math.ceil(len(dataset-1)*(split))
-    
-    # split sets
-    df['split'] = 'tr'
-    df.loc[:testset_size-1, 'split'] = 'te'
-    df.loc[testset_size:2*testset_size-1, 'split'] = 'va'
-    
-    df.drop(columns='percentage', inplace=True)
-    
-    trainset = df.loc[df['split'] == 'tr', 'op'].tolist()
-    validset = df.loc[df['split'] == 'va', 'op'].tolist()
-    testset = df.loc[df['split'] == 'te', 'op'].tolist()
-            
-    # add synthetic data
-    if synthetic_data_path != None:
-        trainset = trainset + listdir(synthetic_data_path, '.pkl')
-    
+    if num_train_ops != None:
+        #random.shuffle(trainset)
+        trainset = trainset[:num_train_ops]
+
+    validset = listdir(os.path.join(data_path, 'Validation'))
+    testset = listdir(os.path.join(data_path, 'Test'))
+
     # log
     print_log("\tTrainset [{}] Data Channels\t: {}".format(len(trainset),
-                                                    trainset), log_txt)
-    print_log("\tValidset [{}] Data Channels\t: {}".format(len(validset), 
-                                                    validset), log_txt)
-    print_log("\tTestset [{}] Data Channels\t: {}".format(len(testset), 
-                                                    testset), log_txt)
-        
-    return [trainset,validset, testset]
+                                                           trainset), log_txt)
+    print_log("\tValidset [{}] Data Channels\t: {}".format(len(validset),
+                                                           validset), log_txt)
+    print_log("\tTestset [{}] Data Channels\t: {}".format(len(testset),
+                                                          testset), log_txt)
+
+    return [trainset, validset, testset]
 
 
 def plot_error(error_train, error_valid, output_path):
     error_train = remove_tailzeros(error_train.cpu().detach().numpy())
     error_valid = remove_tailzeros(error_valid.cpu().detach().numpy())
-    
+
     plt.rcParams['font.family'] = 'Times New Roman'
     plt.rcParams['font.size'] = 18
-        
+
     plt.figure(dpi=FIG_DPI, constrained_layout=True)
     plt.plot(error_train, color='#084c61', linewidth=2, label='Train')
     plt.plot(error_valid, color='#a6382e', linewidth=2, label='Valid')
@@ -228,11 +199,11 @@ def plot_error(error_train, error_valid, output_path):
     plt.legend(loc="upper right", fontsize=12)
     plt.savefig(output_path+'results/error_function.jpg')
     plt.close('all')
-    
-    
+
+
 def plot_ribbon(data, title, output_path, repeat=16):
     ''' Plots color ribbon with legend
-    
+
     data        : np.array [1xN]
                     Data to plot
 
@@ -248,76 +219,77 @@ def plot_ribbon(data, title, output_path, repeat=16):
     save_path = os.path.join(output_path, title+'.jpg')
 
     # Labels
-    phases = ['Preperation', 'Puncture', 'GuideWire', 'CathPlacement', 
-        'CathPositioning', 'CathAdjustment', 'CathControl', 'Closing', 'Transition']
+    phases = ['Preperation', 'Puncture', 'GuideWire', 'CathPlacement',
+              'CathPositioning', 'CathAdjustment', 'CathControl', 'Closing', 'Transition']
 
     # Check data type
-    assert type(data) == type(np.zeros([1, 1])), "Input data should be a numpy array"
-
+    assert type(data) == type(
+        np.zeros([1, 1])), "Input data should be a numpy array"
 
     # Adapt shape
     data = np.expand_dims(data, 0)
-    
+
     # Repeat for thickness
-    data = np.repeat(data, repeats = repeat, axis = 0)
-    formatter = matplotlib.ticker.FuncFormatter(lambda s, 
-        x: time.strftime('%M:%S', time.gmtime(s // 60)))
+    data = np.repeat(data, repeats=repeat, axis=0)
+    formatter = matplotlib.ticker.FuncFormatter(lambda s,
+                                                x: time.strftime('%M:%S', time.gmtime(s // 60)))
     xtick_pos = np.linspace(0, data.shape[1], data.shape[1] // 350)
 
     # Cmap
     def_cmap = plt.cm.get_cmap('tab10')
     color_list = def_cmap(np.linspace(0, 1, 9))
-    disc_cmap = matplotlib.colors.LinearSegmentedColormap.from_list('DMap', color_list, 9)
+    disc_cmap = matplotlib.colors.LinearSegmentedColormap.from_list(
+        'DMap', color_list, 9)
 
     # Plot
-    plt.figure(dpi = FIG_DPI)
-    plt.matshow(data, cmap=disc_cmap, vmin = 0, vmax = 8)
+    plt.figure(dpi=FIG_DPI)
+    plt.matshow(data, cmap=disc_cmap, vmin=0, vmax=8)
     plt.grid(False)
     plt.yticks([])
     plt.clim(-0.5, 8.5)
-    cbar = plt.colorbar(ticks = range(len(phases)))
-    cbar.ax.set_yticks(np.arange(len(phases)), labels = phases)
+    cbar = plt.colorbar(ticks=range(len(phases)))
+    cbar.ax.set_yticks(np.arange(len(phases)), labels=phases)
     plt.xticks(xtick_pos, fontsize=18)
     plt.gca().xaxis.tick_bottom()
     plt.gca().xaxis.set_major_formatter(formatter)
     plt.xlabel('Time (HH:MM)')
-    plt.title(title, fontsize=20, pad = 10)
+    plt.title(title, fontsize=20, pad=10)
     plt.savefig(save_path, bbox_inches='tight')
     plt.close('all')
-    
-    
+
+
 def phase_weights(dataset, output_path='./', save_plot=False):
     phase_count = np.zeros(8, dtype=int)
     for d in dataset:
         phase_count += d.dataset.phase_count()
-    
+
     phase_weights = np.append(np.sum(phase_count) / phase_count, 0)
-    
+
     # plot
     if save_plot:
         percentage_count = np.zeros((len(dataset), 8))
-        for i,d in enumerate(dataset):
+        for i, d in enumerate(dataset):
             count = d.dataset.phase_count()
-            percentage_count[i,:] = count / np.sum(count)
-            
+            percentage_count[i, :] = count / np.sum(count)
+
         def_cmap = plt.cm.get_cmap('tab10')
         color_list = def_cmap(np.linspace(0, 1, 9))
-        
+
         save_path = os.path.join(output_path, 'class_distribution.jpg')
-        
-        plt.figure(dpi = FIG_DPI)
-        boxplots = plt.boxplot(percentage_count, 
-                               patch_artist=True, 
+
+        plt.figure(dpi=FIG_DPI)
+        boxplots = plt.boxplot(percentage_count,
+                               patch_artist=True,
                                medianprops=dict(color='black')
-        )
+                               )
         for patch, color in zip(boxplots['boxes'], color_list):
             patch.set_facecolor(color)
-    
-        plt.xticks(ticks=range(1, 9), labels=range(8), fontsize=14)  
+
+        plt.xticks(ticks=range(1, 9), labels=range(8), fontsize=14)
         plt.yticks(fontsize=14)
         plt.xlabel('Surgical Phases', fontsize=18)
         plt.ylabel('Percentage (%)', fontsize=18)
         plt.savefig(save_path, bbox_inches='tight')
         plt.close('all')
-    
+
     return torch.from_numpy(phase_weights).float()

@@ -86,8 +86,9 @@ def gen_data(tokenizer, language_model):
     limit_try = 3
     tokens_per_row = 75
     summary_tokens = 250
-    system_prompt = sdg_prompts.system_prompt
-
+    system_prompt = sdg_prompts.get_system_prompt()
+    base_prompt = sdg_prompts.get_base_prompt()
+    
     # Get op draft
     df = sdg_helper.draft_OP()
 
@@ -104,7 +105,7 @@ def gen_data(tokenizer, language_model):
         # Manage chat
         if i == 0:
             # Add answer template
-            prompt = sdg_prompts.initial_prompt
+            prompt = base_prompt + sdg_prompts.summary_prompt
             prompt += f"\n<Antwort>\n{sub_df.to_csv(index=True, sep=';', index_label='Index')}</Antwort>\n"
 
             messages = [{"role": "system", "content": system_prompt},
@@ -117,7 +118,7 @@ def gen_data(tokenizer, language_model):
             step_df['Text'] = step_df['Text'].str.strip('*')
             step_df['Text'] = step_df['Text'].str.strip('"""')
     
-            prompt = sdg_prompts.base_prompt + sdg_prompts.data_prompt
+            prompt = base_prompt + sdg_prompts.data_prompt
             prompt += f"\n<Daten>\n{step_df.to_csv(index=True, sep=';', index_label='Index')}</Daten>\n"
             prompt += sdg_prompts.iteration_prompt
             prompt += f"\n<Antwort>\n{sub_df.to_csv(index=True, sep=';', index_label='Index')}</Antwort>\n"
