@@ -19,15 +19,19 @@ if __name__ == '__main__':
                         help='identification tag of training')
     
     parser.add_argument('-e', '--epochs', 
-                        type=int, default=100,
+                        type=int, default=1000,
                         help='number of epochs to train')
     
     parser.add_argument('-b', '--batch_size', 
                         type=int, default=64,
                         help='batch size of training data')
     
-    parser.add_argument('-d', '--dropout_prob', 
-                        type=float, default=0.4,
+    parser.add_argument('-m', '--model_dropout', 
+                        type=float, default=0,
+                        help='probability of dropping neural connection')
+    
+    parser.add_argument('-s', '--sentence_dropout', 
+                        type=float, default=0.25,
                         help='probability of dropping neural connection')
     
     parser.add_argument('-l', '--learning_rate', 
@@ -41,14 +45,6 @@ if __name__ == '__main__':
     parser.add_argument('-n', '--model_dim', 
                         type=int, default=256,
                         help='hidden vector size of model')
-    
-    parser.add_argument('-nh', '--num_head', 
-                        type=int, default=4,
-                        help='number of heads in MHA')
-    
-    parser.add_argument('-ne', '--num_enc', 
-                        type=int, default=3,
-                        help='number of stacked encoders')
     
     args = parser.parse_args()
     
@@ -64,7 +60,7 @@ if __name__ == '__main__':
                                                    'synthetic',
                                                    log_txt,
                                                    args.batch_size,
-                                                   num_train_ops=40)
+                                                   num_train_ops=20)
     num_classes = 9
     
     ## Model
@@ -72,7 +68,8 @@ if __name__ == '__main__':
     surgical_model = model.SLPNet(
         model_dim=args.model_dim,
         num_classes=num_classes,
-        dropout_prob=args.dropout_prob
+        model_dropout=args.model_dropout,
+        sentence_dropout=args.sentence_dropout
     ).to(device)
     utils.print_log(surgical_model, log_txt)
     utils.print_log('Number of Parameters: {:,}'.format(sum(p.numel() 
@@ -142,7 +139,7 @@ if __name__ == '__main__':
                 optimizer.step()
 
             # Log OP
-            metrics_train.op_end(data_loader.dataset.op_name)
+            metrics_train.op_end(data_loader.dataset.op_name, plot_ribbon=False)
         
         # Train Log
         error_train[epoch] /= trainset_size
@@ -174,7 +171,7 @@ if __name__ == '__main__':
                 metrics_valid.batch(label_, predict_)
         
             # Log OP
-            metrics_valid.op_end(data_loader.dataset.op_name, plot_ribbon=True)
+            metrics_valid.op_end(data_loader.dataset.op_name, plot_ribbon=False)
             
         # Validation Log
         error_valid[epoch] /= validset_size

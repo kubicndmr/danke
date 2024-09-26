@@ -28,11 +28,19 @@ def listdir(path, ending=None):
                        if f.endswith(ending)])
 
 
-def split_and_copy(from_csv, to_csv):
-    df = pd.read_csv(from_csv, index_col=0)
+def individual_conversations(df_path: str, person: str):
+    df = pd.read_csv(df_path+'.csv', index_col=0)
+    df = df.loc[df['Person'] == person]
+    df = df.drop(columns=['Person'])
+    df.to_csv(df_path+'.csv')
+
+
+def split_sentences(df_path):
+    df = pd.read_csv(df_path+'.csv', index_col=0)
     rows_list = []
 
     for _, row in df.iterrows():
+        print(row['Text'])
         sentences = sent_tokenize(row['Text'])
         for sentence in sentences:
             new_row = row.copy()
@@ -42,7 +50,7 @@ def split_and_copy(from_csv, to_csv):
     df_divided = pd.DataFrame(rows_list)
     df_divided = df_divided.reset_index(drop=True)
     df_divided['Phase_Label'] = df_divided['Phase_Label'].astype(int)
-    df_divided.to_csv(to_csv)
+    df_divided.to_csv(df_path+'.csv')
 
 
 def sentence_embeddings(file_name):
@@ -100,11 +108,15 @@ if __name__ == "__main__":
     parser.add_argument('-t', '--to_path', type=str,
                         help='path to copy')
 
-    parser.add_argument('-s', '--split', type=bool,
-                        help='whether to create individual rows for each sentence in the text column')
+    parser.add_argument('-p', '--person', type=str, default=None,
+                        choices=['Radiologe', 'Assistent', 'Patient'],
+                        help='consider only conversations of a person')
 
-    parser.add_argument('-e', '--embed', type=bool,
-                        help='whether to create sentence embeddings')
+    parser.add_argument('-s', '--split', action='store_true',
+                        help='create individual rows for each sentence in the text column')
+
+    parser.add_argument('-e', '--embed', action='store_true',
+                        help='add sentence embeddings')
 
     args = parser.parse_args()
 
@@ -125,14 +137,17 @@ if __name__ == "__main__":
         for i, (c, t) in enumerate(zip(files_csv, files_txt)):
             target_file = os.path.join(args.to_path, prefix(i+1, 'SynOP_'))
 
-            print(f"{c} \t-> \t{target_file + '.csv'}")
-            print(f"{t} \t-> \t{target_file + '.txt'}")
+            print(f"{c}   \t-> \t{target_file + '.csv'}")
+            print(f"{t}   \t-> \t{target_file + '.txt'}")
+
+            shutil.copy(c, target_file + '.csv')
+            shutil.copy(t, target_file + '.txt')
+
+            if args.person != None:
+                individual_conversations(target_file, args.person)
 
             if args.split:
-                split_and_copy(c, target_file + '.csv')
-            else:
-                shutil.copy(c, target_file + '.csv')
-            shutil.copy(t, target_file + '.txt')
+                split_sentences(target_file)
 
             if args.embed:
                 sentence_embeddings(target_file)
@@ -151,15 +166,17 @@ if __name__ == "__main__":
         for f_i, t_i in enumerate(range(last_index+1, last_index+len(from_files_csv)+1)):
             target_file = os.path.join(args.to_path, prefix(t_i, 'SynOP_'))
 
-            print(f"{from_files_csv[f_i]} \t-> \t{target_file + '.csv'}")
-            print(f"{from_files_txt[f_i]} \t-> \t{target_file + '.txt'}")
+            print(f"{from_files_csv[f_i]}   \t-> \t{target_file + '.csv'}")
+            print(f"{from_files_txt[f_i]}   \t-> \t{target_file + '.txt'}")
+
+            shutil.copy(from_files_csv[f_i], target_file + '.csv')
+            shutil.copy(from_files_txt[f_i], target_file + '.txt')
+
+            if args.person != None:
+                individual_conversations(target_file, args.person)
 
             if args.split:
-                split_and_copy(from_files_csv[f_i], target_file + '.csv')
-            else:
-                shutil.copy(from_files_csv[f_i], target_file + '.csv')
-
-            shutil.copy(from_files_txt[f_i], target_file + '.txt')
+                split_sentences(target_file)
 
             if args.embed:
                 sentence_embeddings(target_file)

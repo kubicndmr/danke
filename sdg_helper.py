@@ -1,9 +1,8 @@
 import os
 import copy
+import random
 import numpy as np
 import pandas as pd
-
-#np.random.seed(271)
 
 # Variables
 transcript_path = 'Transcripts/'
@@ -55,7 +54,7 @@ def listdir(path, ending=None):
 def extract_model_response(answer, instruction_tag='[/INST]'):
     model_response = []
     response_flag = False
-    
+
     for line in answer.splitlines():
         if instruction_tag in line:
             response_flag = True
@@ -64,7 +63,7 @@ def extract_model_response(answer, instruction_tag='[/INST]'):
                 line = line.strip()
         if response_flag:
             model_response.append(line)
-            
+
     return '\n'.join(model_response)
 
 
@@ -82,7 +81,7 @@ def get_tagged_block(answer, start_tag, end_tag):
     """
     block = []
     tag_flag = False
-    
+
     for line in answer.splitlines():
         line = line.strip()
         if start_tag in line:
@@ -101,7 +100,7 @@ def get_tagged_block(answer, start_tag, end_tag):
         if tag_flag:
             if line != '':
                 block.append(line)
-    
+
     if len(block) == 0:
         search_open = True
         for line in reversed(answer.split('\n')):
@@ -112,7 +111,7 @@ def get_tagged_block(answer, start_tag, end_tag):
                     block.append(line)
                     search_open = False
         block = [b for b in reversed(block)]
-        
+
     return block
 
 
@@ -173,38 +172,27 @@ def line_errors(block, true_len, delimeter=";"):
         return tested_block
 
 
-def merge_small_groups(groups, min_size=6):
-    merged_groups = []
-    current_group = groups[0]
+def df_splitter(df, max_df_length=5):
+    split_dfs = []  
+    temp_df = pd.DataFrame()
 
-    for next_group in groups[1:]:
-        if len(current_group) < min_size:
-            current_group = pd.concat([current_group, next_group])
-        else:
-            merged_groups.append(current_group)
-            current_group = next_group
+    prev_person = None 
 
-    # Add the last group
-    if len(current_group) < min_size and merged_groups:
-        merged_groups[-1] = pd.concat([merged_groups[-1], current_group])
-    else:
-        merged_groups.append(current_group)
+    for i, row in df.iterrows():
+        current_person = row['Person']
+    
+        if current_person != prev_person or len(temp_df) >= max_df_length:
+            if not temp_df.empty:
+                split_dfs.append(temp_df)  
+            temp_df = pd.DataFrame()
+        
+        temp_df = pd.concat([temp_df, pd.DataFrame([row])], ignore_index=False)
+        prev_person = current_person
 
-    return merged_groups
-
-
-def df_splitter(df, max_df_length=20):
-    split_dfs = []
-
-    for _, split_df in df.groupby('Phase'):
-        if len(split_df) <= max_df_length:
-            split_dfs.append(split_df)
-        else:
-            num_split = int(np.ceil(len(split_df) / max_df_length))
-            sub_dfs = np.array_split(split_df, num_split)
-            split_dfs.extend(sub_dfs)
-
-    return merge_small_groups(split_dfs)
+    if not temp_df.empty:
+        split_dfs.append(temp_df)
+    
+    return split_dfs
 
 
 def check_format(block, columns, generation_tag='*Ausfüllen*'):
@@ -234,8 +222,8 @@ def phase_count_limits(dataset):
         phase_count[i, :] = array_count
 
     # compute quantiles
-    lower_quantile = np.ceil(np.quantile(phase_count, 0.25, axis=0))
-    upper_quantile = np.ceil(np.quantile(phase_count, 0.75, axis=0))
+    lower_quantile = np.ceil(np.quantile(phase_count, 0.1, axis=0))
+    upper_quantile = np.ceil(np.quantile(phase_count, 0.9, axis=0))
 
     # add randomness to quantile values
     lower_quantile[lower_quantile < 2] = 2
@@ -250,10 +238,12 @@ def phase_count_limits(dataset):
     return lower_quantile, upper_quantile
 
 
-def sample_phase_lengths():
+def sample_phase_lengths(min_upper_limit=10):
     lower_limit, upper_limit = phase_count_limits(dataset=transcripts)
     phase_lengths = np.zeros(8, dtype=int)
     for phase in range(0, 8):
+        if upper_limit[phase] < min_upper_limit:
+            upper_limit[phase] = min_upper_limit
         phase_lengths[phase] = np.random.randint(
             lower_limit[phase], upper_limit[phase])
     return phase_lengths
@@ -307,39 +297,36 @@ def sample_daily_topic():
     return topics.loc[np.random.randint(1, len(topics)), 'Thema']
 
 
-def sample_persona():
-    return personae.loc[np.random.randint(1, len(personae)), 'Persona']
+def sample_radiologe():
+    return personae.loc[np.random.randint(1, len(personae)), 'Radiologe']
 
 
-def sample_seed_OPs(N: int):
-    prompt = ""
+def sample_assistent():
+    return personae.loc[np.random.randint(1, len(personae)), 'Assistent']
 
-    for i, op in enumerate(np.random.choice(transcripts, N, False)):
-        df = pd.read_csv(op, index_col=0)
-        df = df.drop(columns=['File_Name', 'End_Time'])
-        df = df[df['Text'] != '<nicht verstanden>']
-        df = df[~df['Phase_Label'].isin([8, '8'])]
-        df = df.rename(columns={
-            'Start_Time': 'Startzeit',
-            'Phase_Label': 'Phase'
-        })
-        df['Phase'] = df['Phase'].map(surgical_phases)
-        df = df[['Startzeit', 'Phase', 'Text']]
-        prompt += f"\n<Beispieldaten {i+1}>\n{df.to_csv(index=True, sep=';', index_label='Index')}</Beispieldaten {i+1}>\n"
 
-    return prompt
+def sample_patient():
+    return personae.loc[np.random.randint(1, len(personae)), 'Patient']
 
 
 def draft_OP():
     phase_dfs = []
+    patient_percentage = 0.3
+    assistant_percentage = 0.3
     phase_lengths = sample_phase_lengths()
-    time_stamps = sample_time_stamps(phase_lengths)
     daily_percentage = sample_daily_percentage()
+    time_stamps = sample_time_stamps(phase_lengths)
 
     # Create phasewise dataframes
     for phase in range(8):
         phase_df = pd.DataFrame(index=range(phase_lengths[phase]))
         steps = surgical_steps[phase]
+
+        # In preperation phase, step order can change
+        if phase in [0, 7]:
+            random.shuffle(steps)
+
+        # Fill
         if len(phase_df) > len(steps):
             phase_df['Schritt'] = np.repeat(steps, int(
                 np.ceil(len(phase_df) / len(steps))))[:len(phase_df)]
@@ -362,7 +349,52 @@ def draft_OP():
                                       size=int(len(df)*daily_percentage), replace=False)
     df.loc[random_indices, 'Schritt'] = 'Alltäglich'
 
+    # Add talking person
+    df['Person'] = 'Radiologe'
+
+    num_patient_rows = int(len(df) * patient_percentage)
+    num_assistant_rows = int(len(df) * assistant_percentage)
+
+    # Patient
+    random_indices = np.random.choice(
+        df.index, size=num_patient_rows, replace=False)
+
+    for index in random_indices:
+        new_row = pd.DataFrame({
+                'Startzeit': [np.nan],
+                'Schritt': [np.nan],
+                'Phase': [np.nan],
+                'Person': ['Patient'],
+                'Text': ['*Ausfüllen*']
+            })
+        
+        df = pd.concat([df.iloc[:index], new_row,
+                       df.iloc[index:]]).reset_index(drop=True)
+
+    # Assistant
+    random_indices = np.random.choice(
+        df.index, size=num_assistant_rows, replace=False)
+
+    for index in random_indices:
+        new_row = pd.DataFrame({
+                'Startzeit': [np.nan],
+                'Schritt': [np.nan],
+                'Phase': [np.nan],
+                'Person': ['Assistent'],
+                'Text': ['*Ausfüllen*']
+            })
+        
+        df = pd.concat([df.iloc[:index], new_row,
+                       df.iloc[index:]]).reset_index(drop=True)
+
+    df['Startzeit'] = df['Startzeit'].apply(pd.to_numeric).ffill()
+    df['Startzeit'] = df['Startzeit'].bfill()
+    df['Schritt'] = df['Schritt'].ffill()
+    df['Schritt'] = df['Schritt'].bfill()
+    df['Phase'] = df['Phase'].ffill()
+    df['Phase'] = df['Phase'].bfill().astype(int)
+
     # Adjust order of columns
-    df = df[['Startzeit', 'Schritt', 'Phase', 'Text']]
+    df = df[['Startzeit', 'Schritt', 'Phase', 'Person', 'Text']]
 
     return df

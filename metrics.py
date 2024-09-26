@@ -63,10 +63,10 @@ class SPRMetrics:
         # Plot ribbon
         if plot_ribbon:
             save_dir = self.output_path + \
-                f"results/ribbons/Epoch_{self.epoch}/"
+                f"results/ribbons/{op_name}/"
             if not os.path.exists(save_dir):
                 os.mkdir(save_dir)
-            utils.plot_ribbon(prediction, op_name, save_dir)
+            utils.plot_ribbon(prediction, f'Epoch_{self.epoch}', save_dir)
 
         # Reset memory
         self.op_gt = []
@@ -144,7 +144,7 @@ class SPRMetrics:
             for i, metric in enumerate(self.metric_keys):
                 plt.plot(utils.remove_tailzeros(
                     self.syn_metrics[:, i]), label=metric)
-                utils.print_log(f"[{mode}-Syn]\tMax {metric} is: {np.max(self.syn_metrics[:, i]):.5f}, Epoch: {np.argmax(self.syn_metrics[:, i])}",
+                utils.print_log(f"[{mode}-Syn]\tMax {metric} is: {np.max(self.syn_metrics[:, i]):.5f} Epoch: {np.argmax(self.syn_metrics[:, i])}",
                                 self.log_txt,
                                 display=True)
 

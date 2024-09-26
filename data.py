@@ -24,7 +24,7 @@ class SPRDataset(Dataset):
 
     def phase_count(self):
         array_count = np.zeros(8, dtype=int)
-        phases = self.data['Phase_Label'].value_counts().drop(
+        phases = self.data['Phase_Label'].astype(int).value_counts().drop(
             8, errors='ignore')
         array_count[phases.index] = phases.values
         return array_count

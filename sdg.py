@@ -23,7 +23,7 @@ if DEBUG_MODE:
 
 
 def get_answer(tokenizer, language_model, messages, max_new_tokens,
-               do_sample=True, top_p=0.95, temperature=1, repetition_penalty=1.1):
+               do_sample=True, top_p=0.95, temperature=1.2, repetition_penalty=1.1):
     """
     Generates a response from the model based on the provided chat history.
 
@@ -45,8 +45,8 @@ def get_answer(tokenizer, language_model, messages, max_new_tokens,
         messages, tokenize=False, add_generation_prompt=True)
 
     # Encode the prompt to input tensor
-    inputs = tokenizer(prompt, return_tensors="pt")
-    inputs['input_ids'] = inputs['input_ids'].to(language_model.device)
+    inputs = tokenizer.encode(prompt, return_tensors="pt")
+    #inputs['input_ids'] = inputs['input_ids'].to(language_model.device)
 
     # Output
     if DEBUG_MODE:
@@ -56,7 +56,8 @@ def get_answer(tokenizer, language_model, messages, max_new_tokens,
 
     # Generate the model's response
     outputs = language_model.generate(
-        **inputs,
+        #**inputs,
+        input_ids=inputs.to(language_model.device),
         pad_token_id=tokenizer.eos_token_id,
         eos_token_id=tokenizer.eos_token_id,
         max_new_tokens=max_new_tokens,
@@ -68,7 +69,7 @@ def get_answer(tokenizer, language_model, messages, max_new_tokens,
 
     # Decode the model's output and update the chat history
     response = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    response = sdg_helper.extract_model_response(response)
+    response = sdg_helper.extract_model_response(response, instruction_tag='model')
 
     # Output
     if DEBUG_MODE:
@@ -78,16 +79,15 @@ def get_answer(tokenizer, language_model, messages, max_new_tokens,
     return response
 
 
-def gen_data(tokenizer, language_model):
+def gen_data(tokenizer, language_model, prompter, save_name):
     '''
     Generates synthetic data
     '''
     # Variables
-    limit_try = 3
+    limit_try = 5
     tokens_per_row = 75
-    summary_tokens = 250
-    system_prompt = sdg_prompts.get_system_prompt()
-    base_prompt = sdg_prompts.get_base_prompt()
+    summary_tokens = 200
+    prompter.init_OR()
     
     # Get op draft
     df = sdg_helper.draft_OP()
@@ -102,14 +102,23 @@ def gen_data(tokenizer, language_model):
         sub_df['Phase'] = sub_df['Phase'].map(
             sdg_helper.surgical_phases)
 
-        # Manage chat
-        if i == 0:
-            # Add answer template
-            prompt = base_prompt + sdg_prompts.summary_prompt
-            prompt += f"\n<Antwort>\n{sub_df.to_csv(index=True, sep=';', index_label='Index')}</Antwort>\n"
+        person = sub_df['Person'].iloc[0]
+        if person == 'Radiologe':
+            system_prompt = prompter.system_radiologe
+        elif person == 'Assistent':
+            system_prompt = prompter.system_assistant
+        elif person == 'Patient':
+            system_prompt = prompter.system_patient
+        else:
+            print('Person had a problem')
 
-            messages = [{"role": "system", "content": system_prompt},
-                        {"role": "user", "content": prompt}]
+        # Manage chat
+        if len(dfs_to_concat) == 0:
+            # Add answer template
+            prompt = prompter.get_initial_prompt(sub_df)
+            #messages = [{"role": "system", "content": system_prompt},
+            #            {"role": "user", "content": prompt}]
+            messages = [{"role": "user", "content": system_prompt + '\n' + prompt}]
             messages_log = messages.copy()
 
         else:
@@ -118,21 +127,19 @@ def gen_data(tokenizer, language_model):
             step_df['Text'] = step_df['Text'].str.strip('*')
             step_df['Text'] = step_df['Text'].str.strip('"""')
     
-            prompt = base_prompt + sdg_prompts.data_prompt
-            prompt += f"\n<Daten>\n{step_df.to_csv(index=True, sep=';', index_label='Index')}</Daten>\n"
-            prompt += sdg_prompts.iteration_prompt
-            prompt += f"\n<Antwort>\n{sub_df.to_csv(index=True, sep=';', index_label='Index')}</Antwort>\n"
-
-            messages = [{"role": "system", "content": system_prompt},
-                        {"role": "user", "content": prompt}]
+            prompt = prompter.get_iteration_prompt(step_df, sub_df)
+            #messages = [{"role": "system", "content": system_prompt},
+            #            {"role": "user", "content": prompt}]
+            messages = [{"role": "user", "content": system_prompt + '\n' + prompt}]
             messages_log.append({"role": "user", "content": prompt})
 
         # Try limit_try times, if LM cant follow instructions
         n_try = 0
         while n_try < limit_try:
+            #if True:
             try:
                 print(
-                    f'\tStep 1: {int(i+1)}/{len(df_splits)} max new tokens: {max_new_tokens}')
+                    f'\tStep: {int(i+1)}/{len(df_splits)}\t\t|\tMax new tokens: {max_new_tokens}')
 
                 # Generate Answer
                 answer = get_answer(tokenizer, language_model,
@@ -145,10 +152,10 @@ def gen_data(tokenizer, language_model):
                 # Check line shapes/errors
                 block_answer = sdg_helper.line_errors(
                     block_answer, len(sub_df))
-
+                
                 # Check format
                 correct_format = sdg_helper.check_format(block_answer, [
-                    'Index', 'Startzeit', 'Schritt', 'Phase', 'Text'])
+                    'Index', 'Startzeit', 'Schritt', 'Phase', 'Person', 'Text'])
                 if not correct_format:
                     raise ValueError(f"Columns or rows do not match")
                 
@@ -163,18 +170,24 @@ def gen_data(tokenizer, language_model):
                 n_try = limit_try
                 steps_complete[i] = 1
                 
-                if DEBUG_MODE:
-                    with open(f'step_1_{i+1}.txt', 'w') as f:
-                            for m in messages:
-                                f.write('\n'+'*'*50+' <'+m['role']+'> '+'*'*50+'\n')
-                                f.write(m['content'])
-
+            #if False:
             except:
+                if DEBUG_MODE:      
+                    with open(f'{save_name[:-4]}_Step_{i+1}_Try_{n_try}.txt', 'w') as f:
+                        f.write('\n'+'*'*50+' <Answer> '+'*'*50+'\n')
+                        f.write(answer)
+                        f.write('\n'+'*'*50+' <Prompt> '+'*'*50+'\n')
+                        f.write(system_prompt + '\n' + prompt)
+                    
                 n_try += 1
+                max_new_tokens -= 10
                 print(f'\t\tConnot genreate Step {i+1}, will try again')
+                
+        if steps_complete[i] == 0:
+            limit_try = -1
 
     result_df = pd.concat(dfs_to_concat)
-    result_df = result_df[['Startzeit', 'Text', 'Schritt', 'Phase']]
+    result_df = result_df[['Startzeit', 'Person', 'Text', 'Schritt', 'Phase']]
     result_df['Phase_Label'] = result_df['Phase'].map(sdg_helper.reversed_surgical_phases)
     result_df['Text'] = result_df['Text'].str.strip()
     result_df['Text'] = result_df['Text'].str.strip('*')
@@ -215,8 +228,10 @@ if __name__ == "__main__":
     error_patience = 3
     prefix_idx = args.prefix_index
     end_idx = prefix_idx + args.num_target - 1
-    model_id = 'mistralai/Mistral-Large-Instruct-2407'
-
+    #model_id = 'mistralai/Mistral-Large-Instruct-2407'
+    #model_id = 'mistralai/Mistral-Nemo-Instruct-2407'
+    model_id = 'google/gemma-2-27b-it'
+    
     # Login huggingface environment
     load_dotenv()
     huggingface_hub.login(os.getenv('HF_TOKEN'), add_to_git_credential=False)
@@ -234,8 +249,12 @@ if __name__ == "__main__":
     auto_tokenizer = None
     auto_language_model = None
     '''
+    # Prompts
+    prompter = sdg_prompts.SDGPrompts()
+    
     # Generate Data
     while prefix_idx <= end_idx and error_count < error_patience:
+        #if True:
         try:
             # set save name
             save_name = os.path.join(
@@ -246,7 +265,9 @@ if __name__ == "__main__":
             generation_start = time.time()
             df, log_container = gen_data(
                 tokenizer=auto_tokenizer,
-                language_model=auto_language_model
+                language_model=auto_language_model,
+                prompter=prompter,
+                save_name=save_name
             )
 
             # save & update
@@ -265,6 +286,7 @@ if __name__ == "__main__":
             error_count = 0
 
         # uppps
+        #if False:
         except:
             print(f"\t{save_name} could not generated. Trying again!")
             error_count += 1
