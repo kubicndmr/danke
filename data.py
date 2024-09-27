@@ -33,10 +33,9 @@ class SPRDataset(Dataset):
         return len(self.data)
 
 
-def get_dataset(data_path, train_mode, log_txt, batch_size, num_train_ops=None):
+def get_dataset(data_path, log_txt, num_train_ops, batch_size):
     datasets = []
     data_splits = utils.data_split(data_path,
-                                   train_mode,
                                    log_txt,
                                    num_train_ops
                                    )

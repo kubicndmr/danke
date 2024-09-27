@@ -76,7 +76,7 @@ def init_log(args):
     for f in os.listdir("./"):
         if f.endswith(".py"):
             shutil.copyfile(f, output_dir+"/code/"+f)
-    save_args(args, output_dir+"results/args.yaml")
+    save_args(args, output_dir+"args.yaml")
 
     # log txt
     log_txt = os.path.join(output_dir, "log.txt")
@@ -156,22 +156,14 @@ def save_args(args, filename):
         yaml.dump(params, file, default_flow_style=False)
 
 
-def data_split(data_path, train_mode, log_txt, num_train_ops=None):
-    if train_mode == 'real':
-        trainset = listdir(os.path.join(data_path, 'Train_PoCaP'))
-    elif train_mode == 'synthetic':
-        trainset = listdir(os.path.join(data_path, 'Train_SynPoCaP'))
-    elif train_mode == 'mix':
-        real = listdir(os.path.join(data_path, 'Train_PoCaP'))
-        syn = listdir(os.path.join(data_path, 'Train_SynPoCaP'))
-        trainset = real + syn
-
-    if num_train_ops != None:
-        #random.shuffle(trainset)
+def data_split(data_path, log_txt, num_train_ops):
+    
+    trainset = listdir(data_path['train'])
+    if num_train_ops != -1:
         trainset = trainset[:num_train_ops]
 
-    validset = listdir(os.path.join(data_path, 'Validation'))
-    testset = listdir(os.path.join(data_path, 'Test'))
+    validset = listdir(data_path['valid'])
+    testset = listdir(data_path['test'])
 
     # log
     print_log("\tTrainset [{}] Data Channels\t: {}".format(len(trainset),
