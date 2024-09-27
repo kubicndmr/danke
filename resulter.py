@@ -10,16 +10,16 @@ parser.add_argument('-t', '--experiment_tag', type=str)
 args = parser.parse_args()
 
 experiment_folder = args.experiment_folder
+experiment_list = os.listdir(experiment_folder)
 
-real_acc = np.zeros(5)
-real_f1 = np.zeros(5)
-real_jac = np.zeros(5)
-syn_acc = np.zeros(5)
-syn_f1 = np.zeros(5)
-syn_jac = np.zeros(5)
+real_acc = np.zeros(len(experiment_list))
+real_f1 = np.zeros(len(experiment_list))
+real_jac = np.zeros(len(experiment_list))
+syn_acc = np.zeros(len(experiment_list))
+syn_f1 = np.zeros(len(experiment_list))
+syn_jac = np.zeros(len(experiment_list))
 
-for i, experiment in enumerate(os.listdir(experiment_folder)):
-
+for i, experiment in enumerate(experiment_list):
     with open(os.path.join(experiment_folder, experiment, 'log.txt'), 'r') as log_file:
         for line in log_file:
             if line.startswith('[validation-Real]\tMax Acc'):
@@ -34,7 +34,6 @@ for i, experiment in enumerate(os.listdir(experiment_folder)):
                 syn_f1[i] = line[28:35]
             elif line.startswith('[validation-Syn]\tMax Jaccard'):
                 syn_jac[i] = line[33:40]
-
 
 print('--{'+args.experiment_tag+'}--')
 print('\t   [Mean]\t  [Std]\n'+'-'*35)
