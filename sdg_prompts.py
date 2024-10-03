@@ -1,14 +1,16 @@
 import sdg_helper
+from num2words import num2words
+
 
 class SDGPrompts:
     def __init__(self):
         pass
-    
+
     def init_prompts(self):
         self.system_radiologe = f"Du bist ein hilfsbereiter Assistent, der realistische Gespräche führt, indem er eine bestimmte Persona simuliert. Die Persona gehört zu einem Radiologen, der bei einem Krankenhaus in Deutschland arbeitet. Du simulierst {self.radiologe}"
         self.system_assistant = f"Du bist hilfsbereiter Assistent, der realistische Gespräche führt, indem er eine bestimmte Persona simuliert. Die Persona gehört zu einem medizinischen Assistenten, der bei einem Krankenhaus in Deutschland arbeitet. Du simulierst {self.assistent}"
         self.system_patient = f"Du bist ein hilfreicher Assistent, der realistische Gespräche führt, indem er eine bestimmte Persona simuliert. Die Persona gehört zu einem Patient, derin einem Krankenhaus in Deutschland operiert wird. Du simulierst {self.patient}"
-        
+
         self.base_prompt = f"""Das Ziel ist es, realistische und einzigartige Gespräche in einem Operationssaal während einer Port-Katheter-Platzierung zu simulieren.
 
 * Personal: Die Port-Katheter-Platzierung wird von einem Radiologen und einem medizinischen Assistenten in der radiologischen Abteilung durchgeführt. Der Radiologe ist verantwortlich für die Durchführung des Verfahrens, die Kommunikation mit dem Assistenten, um Anweisungen zu geben, und die Interaktion mit dem Patienten, um dessen Zustand zu überwachen und ihn ruhig zu halten. Der Assistent ist für die Vorbereitung steriler Materialien und die Bedienung des Röntgengeräts auf Anweisung des Radiologen zuständig. Der Patient ist die Person, die sich dem Verfahren unterzieht. 
@@ -85,13 +87,26 @@ Schreib hier
         self.topic = sdg_helper.sample_daily_topic()
         self.init_prompts()
 
-    def get_initial_prompt(self, df):
-        prompt = self.base_prompt + self.summary_prompt
+    def get_step_remainder_prompt(self, person, step_label, step_count, idx):
+        return f"""\n* Überblick: Im angegebenen Datenteil siehst du einen Ausschnitt aus dem Gesamtdatensatz. Aber, insgesamt wird die Person <{person}> während des aktuellen Operationsschritts <{step_label}> <{num2words(step_count, lang='de')}> Mal sprechen. In diesem Teil beginnst du mit dem Satzindex <{num2words(idx+1, lang='de')}>. Plane deine Sätze entsprechend.\n"""
+
+    def get_initial_prompt(self, df, person, step_label, step_count):
+        prompt = self.base_prompt
+        if step_label != 'Alltäglich':
+            prompt += self.get_step_remainder_prompt(
+                person, step_label, step_count, 0)
+        prompt += self.summary_prompt
         prompt += f"\n<Antwort>\n{df.to_csv(index=True, sep=';', index_label='Index')}</Antwort>\n"
         return prompt
-    
-    def get_iteration_prompt(self, step_df, sub_df, context_length=25):
-        prompt = self.base_prompt + self.data_prompt
+
+    def get_iteration_prompt(self, step_df, sub_df, person, step_label, step_count, context_length=25):
+        prompt = self.base_prompt
+        if step_label != 'Alltäglich':
+            sentence_idx = step_df[(step_df['Schritt'] == step_label) &
+                                   (step_df['Person'] == person)].shape[0]
+            prompt += self.get_step_remainder_prompt(
+                person, step_label, step_count, sentence_idx)
+        prompt += self.data_prompt
         prompt += f"\n<Daten>\n{step_df.tail(context_length).to_csv(index=True, sep=';', index_label='Index')}</Daten>\n"
         prompt += self.iteration_prompt
         prompt += f"\n<Antwort>\n{sub_df.to_csv(index=True, sep=';', index_label='Index')}</Antwort>\n"

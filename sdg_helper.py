@@ -173,25 +173,25 @@ def line_errors(block, true_len, delimeter=";"):
 
 
 def df_splitter(df, max_df_length=5):
-    split_dfs = []  
+    split_dfs = []
     temp_df = pd.DataFrame()
 
-    prev_person = None 
+    prev_person = None
 
     for i, row in df.iterrows():
         current_person = row['Person']
-    
+
         if current_person != prev_person or len(temp_df) >= max_df_length:
             if not temp_df.empty:
-                split_dfs.append(temp_df)  
+                split_dfs.append(temp_df)
             temp_df = pd.DataFrame()
-        
+
         temp_df = pd.concat([temp_df, pd.DataFrame([row])], ignore_index=False)
         prev_person = current_person
 
     if not temp_df.empty:
         split_dfs.append(temp_df)
-    
+
     return split_dfs
 
 
@@ -211,7 +211,8 @@ def check_format(block, columns, generation_tag='*Ausfüllen*'):
 
 
 def phase_count_limits(dataset):
-    eta = 0.1
+    tolerence_percentage = 0.25
+    min_phase_length = 2
     phase_count = np.zeros((len(dataset), 8), dtype=int)
 
     for i, d in enumerate(dataset):
@@ -222,20 +223,15 @@ def phase_count_limits(dataset):
         phase_count[i, :] = array_count
 
     # compute quantiles
-    lower_quantile = np.ceil(np.quantile(phase_count, 0.1, axis=0))
-    upper_quantile = np.ceil(np.quantile(phase_count, 0.9, axis=0))
+    lower_limit = np.min(phase_count, axis=0)
+    upper_limit = np.max(phase_count,axis=0)
 
-    # add randomness to quantile values
-    lower_quantile[lower_quantile < 2] = 2
-    random_addition = np.random.randint(
-        -np.ceil(lower_quantile * eta), np.ceil(lower_quantile * eta))
-    lower_quantile += random_addition
+    lower_limit -= (lower_limit * tolerence_percentage).astype(int)
+    upper_limit += (upper_limit * tolerence_percentage).astype(int)
 
-    random_addition = np.random.randint(
-        -np.ceil(upper_quantile * eta), np.ceil(upper_quantile * eta))
-    upper_quantile += random_addition
+    lower_limit[lower_limit == 0] = min_phase_length
 
-    return lower_quantile, upper_quantile
+    return lower_limit, upper_limit
 
 
 def sample_phase_lengths(min_upper_limit=10):
@@ -322,9 +318,15 @@ def draft_OP():
         phase_df = pd.DataFrame(index=range(phase_lengths[phase]))
         steps = surgical_steps[phase]
 
-        # In preperation phase, step order can change
+        # In preperation and closing phases, step order can change
         if phase in [0, 7]:
             random.shuffle(steps)
+
+        # Randomly remove some steps
+        steps_omit_percentage = random.choice([0, 0.25, 0.5, 0.75])
+        steps_to_remove = random.sample(steps, min(
+            len(steps) - 1, int(len(steps)*steps_omit_percentage)))
+        steps = [step for step in steps if step not in steps_to_remove]
 
         # Fill
         if len(phase_df) > len(steps):
@@ -361,13 +363,13 @@ def draft_OP():
 
     for index in random_indices:
         new_row = pd.DataFrame({
-                'Startzeit': [np.nan],
-                'Schritt': [np.nan],
-                'Phase': [np.nan],
-                'Person': ['Patient'],
-                'Text': ['*Ausfüllen*']
-            })
-        
+            'Startzeit': [np.nan],
+            'Schritt': [np.nan],
+            'Phase': [np.nan],
+            'Person': ['Patient'],
+            'Text': ['*Ausfüllen*']
+        })
+
         df = pd.concat([df.iloc[:index], new_row,
                        df.iloc[index:]]).reset_index(drop=True)
 
@@ -377,13 +379,13 @@ def draft_OP():
 
     for index in random_indices:
         new_row = pd.DataFrame({
-                'Startzeit': [np.nan],
-                'Schritt': [np.nan],
-                'Phase': [np.nan],
-                'Person': ['Assistent'],
-                'Text': ['*Ausfüllen*']
-            })
-        
+            'Startzeit': [np.nan],
+            'Schritt': [np.nan],
+            'Phase': [np.nan],
+            'Person': ['Assistent'],
+            'Text': ['*Ausfüllen*']
+        })
+
         df = pd.concat([df.iloc[:index], new_row,
                        df.iloc[index:]]).reset_index(drop=True)
 
