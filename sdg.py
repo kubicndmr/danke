@@ -228,8 +228,7 @@ if __name__ == "__main__":
     error_patience = 3
     prefix_idx = args.prefix_index
     end_idx = prefix_idx + args.num_target - 1
-    tokens_per_row = random.choice(
-        [50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 65, 70, 75])
+    tokens_per_row = random.choice(range(55, 66))
     # model_id = 'mistralai/Mistral-Large-Instruct-2407'
     # model_id = 'mistralai/Mistral-Nemo-Instruct-2407'
     model_id = 'google/gemma-2-27b-it'

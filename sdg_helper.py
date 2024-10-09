@@ -4,12 +4,15 @@ import random
 import numpy as np
 import pandas as pd
 
+from scipy.stats import gaussian_kde
+
 # Variables
 transcript_path = 'Transcripts/'
-transcript_set = ['OP_005.csv', 'OP_023.csv', 'OP_027.csv', 'OP_040.csv',
-                  'OP_035.csv', 'OP_038.csv', 'OP_013.csv', 'OP_009.csv',
-                  'OP_011.csv', 'OP_007.csv', 'OP_019.csv', 'OP_002.csv',
-                  'OP_039.csv', 'OP_026.csv', 'OP_016.csv']  # 006 -> 500+, 17, 22, 24, 32 --> 230+
+transcript_set = ['OP_002.csv', 'OP_003.csv', 'OP_004.csv',
+                  'OP_007.csv', 'OP_009.csv', 'OP_011.csv', 'OP_013.csv',
+                  'OP_016.csv', 'OP_017.csv', 'OP_019.csv',
+                  'OP_024.csv', 'OP_026.csv', 'OP_029.csv', 'OP_030.csv',
+                  'OP_032.csv', 'OP_038.csv', 'OP_039.csv', 'OP_040.csv']  # 006 -> 500+, 22 --> 230+
 transcripts = [os.path.join('Transcripts/', s)
                for s in transcript_set]
 
@@ -213,7 +216,8 @@ def check_format(block, columns, generation_tag='*Ausfüllen*'):
 
 
 def phase_count_limits(dataset):
-    tolerence_percentage = 0.25
+    tolerence_percentage = 0.4
+    min_upper_limit = 10
     min_phase_length = 2
     phase_count = np.zeros((len(dataset), 8), dtype=int)
 
@@ -232,19 +236,27 @@ def phase_count_limits(dataset):
     upper_limit += (upper_limit * tolerence_percentage).astype(int)
 
     lower_limit[lower_limit == 0] = min_phase_length
+    upper_limit[upper_limit < min_upper_limit] = min_upper_limit
 
-    return lower_limit, upper_limit
+    return lower_limit, upper_limit, phase_count
 
 
-def sample_phase_lengths(min_upper_limit=10):
-    lower_limit, upper_limit = phase_count_limits(dataset=transcripts)
+def sample_phase_lengths():
+    lower_limit, upper_limit, phase_count = phase_count_limits(
+        dataset=transcripts)
     phase_lengths = np.zeros(8, dtype=int)
-    for phase in range(0, 8):
-        if upper_limit[phase] < min_upper_limit:
-            upper_limit[phase] = min_upper_limit
-        phase_lengths[phase] = np.random.randint(
-            lower_limit[phase], upper_limit[phase])
-    return phase_lengths
+
+    for phase in range(8):
+        current_phase_data = phase_count[:, phase]
+
+        kde = gaussian_kde(current_phase_data[current_phase_data > 0])
+
+        sampled_length = kde.resample(1)[0][0]
+
+        phase_lengths[phase] = int(
+            np.clip(sampled_length, lower_limit[phase], upper_limit[phase]))
+
+    return phase_lengths, 1 - phase_lengths/upper_limit
 
 
 def time_count_limits(dataset):
@@ -330,9 +342,9 @@ def sample_problem(complication_probability=0.3):
 
 def draft_OP():
     phase_dfs = []
-    patient_percentage = 0.3
-    assistant_percentage = 0.3
-    phase_lengths = sample_phase_lengths()
+    patient_percentage = random.choice([0.25, 0.3, 0.35, 0.4])
+    assistant_percentage = random.choice([0.25, 0.3, 0.35, 0.4])
+    phase_lengths, phase_length_scale = sample_phase_lengths()
     daily_percentage = sample_daily_percentage()
     time_stamps = sample_time_stamps(phase_lengths)
 
@@ -345,8 +357,9 @@ def draft_OP():
         if phase in [0, 7]:
             random.shuffle(steps)
 
-        # Randomly remove some steps
-        steps_omit_percentage = random.choice([0, 0.25, 0.5, 0.75])
+        # Randomly remove some steps, proportional to relative length of the phase
+        steps_omit_percentage = min(random.choice(
+            [0.5, 0.6, 0.7]), phase_length_scale[phase])
         steps_to_remove = random.sample(steps, min(
             len(steps) - 1, int(len(steps)*steps_omit_percentage)))
         steps = [step for step in steps if step not in steps_to_remove]
