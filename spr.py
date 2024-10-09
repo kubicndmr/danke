@@ -92,6 +92,7 @@ if __name__ == '__main__':
     utils.print_log('\nNumber of Parameters: {:,}\n'.format(sum(p.numel()
                     for p in surgical_model.parameters() if p.requires_grad)),
                     log_txt)
+    utils.print_log('\n---{ \Model }---', log_txt)
 
     # Loss function
     phase_weights = utils.phase_weights(trainset).to(device)

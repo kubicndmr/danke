@@ -2,6 +2,7 @@ import os
 import sys
 import time
 import torch
+import random
 import argparse
 import sdg_helper
 import sdg_prompts
@@ -80,14 +81,13 @@ def get_answer(tokenizer, language_model, messages, max_new_tokens,
     return response
 
 
-def gen_data(tokenizer, language_model, prompter, save_name):
+def gen_data(tokenizer, language_model, prompter, tokens_per_row, save_name):
     '''
     Generates synthetic data
     '''
     # Variables
     limit_try = 5
-    tokens_per_row = 50
-    summary_tokens = 200
+    summary_tokens = 150
     prompter.init_OR()
 
     # Get op draft
@@ -98,34 +98,26 @@ def gen_data(tokenizer, language_model, prompter, save_name):
     df_splits = sdg_helper.df_splitter(df)
     steps_complete = np.zeros(len(df_splits))
 
-    for i, sub_df in enumerate(df_splits):
-        max_new_tokens = tokens_per_row*len(sub_df) + summary_tokens
-        sub_df['Phase'] = sub_df['Phase'].map(
+    for i, answer_df in enumerate(df_splits):
+        answer_df['Phase'] = answer_df['Phase'].map(
             sdg_helper.surgical_phases)
 
-        person = sub_df['Person'].iloc[0]
-        if person == 'Radiologe':
-            system_prompt = prompter.system_radiologe
-        elif person == 'Assistent':
-            system_prompt = prompter.system_assistant
-        elif person == 'Patient':
-            system_prompt = prompter.system_patient
-        else:
-            print('The person has a problem')
-
-        step_label = sub_df['Schritt'].iloc[0]
+        person = answer_df['Person'].iloc[0]
+        step_label = answer_df['Schritt'].iloc[0]
         step_count = df[(df['Schritt'] == step_label) &
-                         (df['Person'] == person)].shape[0]
+                        (df['Person'] == person)].shape[0]
 
+        if person == 'Radiologe':
+            max_new_tokens = tokens_per_row*len(answer_df) + summary_tokens
+        else:
+            max_new_tokens = tokens_per_row*len(answer_df)
+        
         # Manage chat
         if len(dfs_to_concat) == 0:
-            # Add answer template
-            prompt = prompter.get_initial_prompt(
-                sub_df, person, step_label, step_count)
-            # messages = [{"role": "system", "content": system_prompt},
-            #            {"role": "user", "content": prompt}]
-            messages = [
-                {"role": "user", "content": system_prompt + '\n' + prompt}]
+            prompt = prompter.get_prompt(
+                person, False, None, answer_df, step_label, step_count)
+
+            messages = [{"role": "user", "content": prompt}]
             messages_log = messages.copy()
 
         else:
@@ -134,18 +126,16 @@ def gen_data(tokenizer, language_model, prompter, save_name):
             step_df['Text'] = step_df['Text'].str.strip('*')
             step_df['Text'] = step_df['Text'].str.strip('"""')
 
-            prompt = prompter.get_iteration_prompt(
-                step_df, sub_df, person, step_label, step_count)
-            # messages = [{"role": "system", "content": system_prompt},
-            #            {"role": "user", "content": prompt}]
-            messages = [
-                {"role": "user", "content": system_prompt + '\n' + prompt}]
+            prompt = prompter.get_prompt(
+                person, True, step_df, answer_df, step_label, step_count)
+
+            messages = [{"role": "user", "content": prompt}]
             messages_log.append({"role": "user", "content": prompt})
 
         # Try limit_try times, if LM cant follow instructions
         n_try = 0
         while n_try < limit_try:
-            #if True:
+            # if True:
             try:
                 print(
                     f'\tStep: {int(i+1)}/{len(df_splits)}\t|\tMax new tokens: {max_new_tokens}')
@@ -153,14 +143,14 @@ def gen_data(tokenizer, language_model, prompter, save_name):
                 # Generate Answer
                 answer = get_answer(tokenizer, language_model,
                                     messages, max_new_tokens=max_new_tokens)
-                
+
                 # Extract tagged block
                 block_answer = sdg_helper.get_tagged_block(
                     answer, '<Antwort>', '</Antwort>')
 
                 # Check line shapes/errors
                 block_answer = sdg_helper.line_errors(
-                    block_answer, len(sub_df))
+                    block_answer, len(answer_df))
 
                 # Check format
                 correct_format = sdg_helper.check_format(block_answer, [
@@ -178,15 +168,15 @@ def gen_data(tokenizer, language_model, prompter, save_name):
                 # Exit loop
                 n_try = limit_try
                 steps_complete[i] = 1
-                
-            #if False:
+
+            # if False:
             except:
                 if DEBUG_MODE:
                     with open(f'{save_name[:-4]}_Step_{i+1}_Try_{n_try}.txt', 'w') as f:
                         f.write('\n'+'*'*50+' <Answer> '+'*'*50+'\n')
                         f.write(answer)
                         f.write('\n'+'*'*50+' <Prompt> '+'*'*50+'\n')
-                        f.write(system_prompt + '\n' + prompt)
+                        f.write(prompt)
 
                 n_try += 1
                 max_new_tokens -= 10
@@ -238,6 +228,8 @@ if __name__ == "__main__":
     error_patience = 3
     prefix_idx = args.prefix_index
     end_idx = prefix_idx + args.num_target - 1
+    tokens_per_row = random.choice(
+        [50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 65, 70, 75])
     # model_id = 'mistralai/Mistral-Large-Instruct-2407'
     # model_id = 'mistralai/Mistral-Nemo-Instruct-2407'
     model_id = 'google/gemma-2-27b-it'
@@ -277,6 +269,7 @@ if __name__ == "__main__":
                 tokenizer=auto_tokenizer,
                 language_model=auto_language_model,
                 prompter=prompter,
+                tokens_per_row=tokens_per_row,
                 save_name=save_name
             )
 

@@ -11,12 +11,17 @@ class SentenceDropout(nn.Module):
         self.p = dropout_probability
 
     def forward(self, x):
-        num_dropout = int(x.shape[0]*self.p)
-        random_indices = torch.randint(
-            low=0, high=x.shape[0], size=(1, num_dropout))
-        random_embeds = torch.rand(num_dropout, self.dim, 1, device='cuda')
-        x[random_indices, :, :] = random_embeds
-        return x
+        if self.training:
+            mask = torch.ones_like(x)
+            num_dropout = max(1, int(x.shape[0]*self.p))
+            random_indices = torch.randint(
+                low=0, high=x.shape[0], size=(1, num_dropout))
+            mask[random_indices, :, :] = 0
+            scale = (1 / (1 - self.p))
+        elif not self.training:
+            mask = torch.ones_like(x)
+            scale = 1
+        return x * mask * scale
 
 
 class SLPNet(nn.Module):
@@ -34,20 +39,26 @@ class SLPNet(nn.Module):
 
         self.embed_in = nn.Sequential(
             nn.Conv1d(in_channels=1024, out_channels=model_dim, kernel_size=1),
+            nn.ReLU(),
             nn.BatchNorm1d(model_dim)
         )
 
         self.encoder = nn.LSTM(input_size=model_dim,
-                               hidden_size=model_dim,
-                               dropout=model_dropout)
+                               hidden_size=model_dim)
+
+        self.relu = nn.ReLU()
 
         self.classifier = nn.Linear(
             in_features=model_dim, out_features=num_classes)
 
     def forward(self, x, t):
         x = self.embed_in(x)  # (B, 1024, L) -> (B, model_dim, L)
+
         if self.dropout_layer != None:
             x = self.dropout_layer(x)  # (B, model_dim, L)
+
         x, _ = self.encoder(torch.transpose(x, 1, 2))  # -> (B, L, model_dim)
+        x = self.relu(x)
+
         x = self.classifier(x).squeeze()  # -> (B, num_classes)
         return x

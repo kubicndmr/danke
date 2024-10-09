@@ -54,7 +54,7 @@ def split_sentences(df_path):
 
 def sentence_embeddings(file_name):
     df = pd.read_csv(file_name+'.csv', index_col=0)
-    df = df[df['Text'] != '<nicht verstanden>']
+    df = df[df['Text'] != '<nicht verstanden>'].copy()
     text = df['Text'].tolist()
     df['Embeddings'] = model.encode(
         text, normalize_embeddings=True, convert_to_tensor=True).cpu().tolist()
@@ -80,8 +80,8 @@ def get_files(target_path):
             match_flag = 0
             unmatch_files.append([c, t])
 
-        order_flag_csv = int(c[-9:-4]) == (i+1)
-        order_flag_txt = int(t[-9:-4]) == (i+1)
+        order_flag_csv = int(c.split('_')[1][:-4]) == (i+1)
+        order_flag_txt = int(t.split('_')[1][:-4]) == (i+1)
         order_flag *= (order_flag_csv * order_flag_txt)
         if not order_flag_csv:
             unorder_files.append(c)

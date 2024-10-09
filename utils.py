@@ -160,6 +160,7 @@ def data_split(data_path, log_txt, num_train_ops):
     
     trainset = listdir(data_path['train'])
     if num_train_ops != -1:
+        assert num_train_ops <= len(trainset), f'Trainset has {len(trainset)}-OPs, {num_train_ops} asked' 
         trainset = trainset[:num_train_ops]
 
     validset = listdir(data_path['valid'])

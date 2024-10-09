@@ -74,7 +74,7 @@ class SPRMetrics:
 
     def epoch_end(self, epoch):
         real = len(
-            [1 for metrics in self.op_metrics if metrics['Name'].startswith('OP')]) > 0
+            [1 for metrics in self.op_metrics if metrics['Name'].startswith('Real')]) > 0
         syn = len(
             [1 for metrics in self.op_metrics if metrics['Name'].startswith('Syn')]) > 0
 
@@ -94,7 +94,7 @@ class SPRMetrics:
 
             if real:
                 self.real_metrics[epoch, i] = np.mean(
-                    [metrics[metric] for metrics in self.op_metrics if metrics['Name'].startswith('OP')])
+                    [metrics[metric] for metrics in self.op_metrics if metrics['Name'].startswith('Real')])
             if syn:
                 self.syn_metrics[epoch, i] = np.mean(
                     [metrics[metric] for metrics in self.op_metrics if metrics['Name'].startswith('Syn')])

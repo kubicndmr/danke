@@ -10,11 +10,13 @@ transcript_set = ['OP_005.csv', 'OP_023.csv', 'OP_027.csv', 'OP_040.csv',
                   'OP_035.csv', 'OP_038.csv', 'OP_013.csv', 'OP_009.csv',
                   'OP_011.csv', 'OP_007.csv', 'OP_019.csv', 'OP_002.csv',
                   'OP_039.csv', 'OP_026.csv', 'OP_016.csv']  # 006 -> 500+, 17, 22, 24, 32 --> 230+
-transcripts = [os.path.join('Transcripts_original/', s)
+transcripts = [os.path.join('Transcripts/', s)
                for s in transcript_set]
 
-topics = pd.read_csv('ToC/topics.csv', index_col=0)
-personae = pd.read_csv('ToC/personae.csv', index_col=0)
+topics = pd.read_csv('Utils/topics.csv', index_col=0)
+personae = pd.read_csv('Utils/personae.csv', index_col=0)
+examples = pd.read_csv('Utils/examples.csv')
+problems = pd.read_csv('Utils/problems.csv', index_col=0)
 
 surgical_phases = {
     0: 'Vorbereitung', 1: 'Punktion', 2: 'Führungsdraht',
@@ -224,7 +226,7 @@ def phase_count_limits(dataset):
 
     # compute quantiles
     lower_limit = np.min(phase_count, axis=0)
-    upper_limit = np.max(phase_count,axis=0)
+    upper_limit = np.max(phase_count, axis=0)
 
     lower_limit -= (lower_limit * tolerence_percentage).astype(int)
     upper_limit += (upper_limit * tolerence_percentage).astype(int)
@@ -303,6 +305,27 @@ def sample_assistent():
 
 def sample_patient():
     return personae.loc[np.random.randint(1, len(personae)), 'Patient']
+
+
+def sample_pocap_example(phase, n_examples):
+    df_phase = examples.loc[examples['Phase_Label']
+                            == reversed_surgical_phases[phase]].copy()
+    df_sample = df_phase.sample(n=n_examples, replace=False)
+    df_sample = df_sample.drop(columns=['Phase_Label'])
+    df_sample['Text'] = df_sample['Text'].apply(lambda x: f'Satz: <{x}>')
+    df_sample['Explanation'] = df_sample['Explanation'].apply(
+        lambda x: f', Erklärung: <{x}>')
+
+    return df_sample.to_csv(index=False, sep='\t', header=False, lineterminator="\n\t")
+
+
+def sample_problem(complication_probability=0.3):
+    random_index = np.random.randint(low=0, high=int(
+        len(problems)/complication_probability))
+    if random_index <= len(problems):
+        return problems.loc[random_index, 'complication']
+    else:
+        return None
 
 
 def draft_OP():
@@ -389,12 +412,9 @@ def draft_OP():
         df = pd.concat([df.iloc[:index], new_row,
                        df.iloc[index:]]).reset_index(drop=True)
 
-    df['Startzeit'] = df['Startzeit'].apply(pd.to_numeric).ffill()
-    df['Startzeit'] = df['Startzeit'].bfill()
-    df['Schritt'] = df['Schritt'].ffill()
-    df['Schritt'] = df['Schritt'].bfill()
-    df['Phase'] = df['Phase'].ffill()
-    df['Phase'] = df['Phase'].bfill().astype(int)
+    df['Startzeit'] = df['Startzeit'].apply(pd.to_numeric).ffill().bfill()
+    df['Phase'] = df['Phase'].ffill().bfill().astype(int)
+    df['Schritt'] = df['Schritt'].ffill().bfill()
 
     # Adjust order of columns
     df = df[['Startzeit', 'Schritt', 'Phase', 'Person', 'Text']]
