@@ -24,7 +24,7 @@ if DEBUG_MODE:
 
 
 def get_answer(tokenizer, language_model, messages, max_new_tokens,
-               do_sample=True, top_p=0.95, temperature=1.2, repetition_penalty=1.1):
+               do_sample=True, top_p=0.95, temperature=1.25, repetition_penalty=1.1):
     """
     Generates a response from the model based on the provided chat history.
 
@@ -46,8 +46,8 @@ def get_answer(tokenizer, language_model, messages, max_new_tokens,
         messages, tokenize=False, add_generation_prompt=True)
 
     # Encode the prompt to input tensor
-    inputs = tokenizer.encode(prompt, return_tensors="pt")
-    # inputs['input_ids'] = inputs['input_ids'].to(language_model.device)
+    inputs = tokenizer(prompt, return_tensors="pt")
+    inputs['input_ids'] = inputs['input_ids'].to(language_model.device)
 
     # Output
     if DEBUG_MODE:
@@ -57,8 +57,7 @@ def get_answer(tokenizer, language_model, messages, max_new_tokens,
 
     # Generate the model's response
     outputs = language_model.generate(
-        # **inputs,
-        input_ids=inputs.to(language_model.device),
+        **inputs,
         pad_token_id=tokenizer.eos_token_id,
         eos_token_id=tokenizer.eos_token_id,
         max_new_tokens=max_new_tokens,
@@ -70,8 +69,7 @@ def get_answer(tokenizer, language_model, messages, max_new_tokens,
 
     # Decode the model's output and update the chat history
     response = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    response = sdg_helper.extract_model_response(
-        response, instruction_tag='model')
+    response = sdg_helper.extract_model_response(response)
 
     # Output
     if DEBUG_MODE:
@@ -81,13 +79,15 @@ def get_answer(tokenizer, language_model, messages, max_new_tokens,
     return response
 
 
-def gen_data(tokenizer, language_model, prompter, tokens_per_row, save_name):
+def gen_data(tokenizer, language_model, prompter, save_name):
     '''
     Generates synthetic data
     '''
     # Variables
     limit_try = 5
-    summary_tokens = 150
+    tokens_per_row = 75
+    template_tokens = 50
+    summary_tokens = 250
     prompter.init_OR()
 
     # Get op draft
@@ -108,16 +108,24 @@ def gen_data(tokenizer, language_model, prompter, tokens_per_row, save_name):
                         (df['Person'] == person)].shape[0]
 
         if person == 'Radiologe':
+            system_prompt = prompter.system_radiologe
             max_new_tokens = tokens_per_row*len(answer_df) + summary_tokens
+        elif person == 'Assistent':
+            system_prompt = prompter.system_assistant
+            max_new_tokens = tokens_per_row*len(answer_df) + template_tokens
+        elif person == 'Patient':
+            system_prompt = prompter.system_patient
+            max_new_tokens = tokens_per_row*len(answer_df) + template_tokens
         else:
-            max_new_tokens = tokens_per_row*len(answer_df)
+            print('The person has a problem')
         
         # Manage chat
         if len(dfs_to_concat) == 0:
             prompt = prompter.get_prompt(
                 person, False, None, answer_df, step_label, step_count)
-
-            messages = [{"role": "user", "content": prompt}]
+                        
+            messages = [{"role": "system", "content": system_prompt}, 
+                        {"role": "user", "content": prompt}]
             messages_log = messages.copy()
 
         else:
@@ -129,8 +137,9 @@ def gen_data(tokenizer, language_model, prompter, tokens_per_row, save_name):
             prompt = prompter.get_prompt(
                 person, True, step_df, answer_df, step_label, step_count)
 
-            messages = [{"role": "user", "content": prompt}]
-            messages_log.append({"role": "user", "content": prompt})
+            messages = [{"role": "system", "content": system_prompt}, 
+                        {"role": "user", "content": prompt}]
+            messages_log.extend(messages)
 
         # Try limit_try times, if LM cant follow instructions
         n_try = 0
@@ -179,7 +188,7 @@ def gen_data(tokenizer, language_model, prompter, tokens_per_row, save_name):
                         f.write(prompt)
 
                 n_try += 1
-                max_new_tokens -= 10
+                max_new_tokens += 5
                 print(f'\t\tConnot genreate Step {i+1}, will try again')
 
         if steps_complete[i] == 0:
@@ -228,10 +237,9 @@ if __name__ == "__main__":
     error_patience = 3
     prefix_idx = args.prefix_index
     end_idx = prefix_idx + args.num_target - 1
-    tokens_per_row = random.choice(range(55, 66))
-    # model_id = 'mistralai/Mistral-Large-Instruct-2407'
+    model_id = 'mistralai/Mistral-Large-Instruct-2407'
     # model_id = 'mistralai/Mistral-Nemo-Instruct-2407'
-    model_id = 'google/gemma-2-27b-it'
+    # model_id = 'google/gemma-2-27b-it'
     
     # Login huggingface environment
     load_dotenv()
@@ -268,7 +276,6 @@ if __name__ == "__main__":
                 tokenizer=auto_tokenizer,
                 language_model=auto_language_model,
                 prompter=prompter,
-                tokens_per_row=tokens_per_row,
                 save_name=save_name
             )
 

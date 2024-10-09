@@ -24,11 +24,9 @@ class SDGPrompts:
 
 
     def get_radiologe_prompt(self, iteration, step_df, answer_df, step_label, step_count, n_examples=3, n_context=25):
-        prompt = f"""{self.system_radiologe}
-        
-Das Ziel ist es, realistische und einzigartige Gespräche in einem Operationssaal während einer Port-Katheter-Platzierung zu simulieren.
+        prompt = f"""Das Ziel ist es, realistische und einzigartige Gespräche in einem Operationssaal während einer Port-Katheter-Platzierung zu simulieren.
 
-* Personal: Die Port-Katheter-Platzierung wird von einem Radiologen und einem medizinischen Assistenten in der radiologischen Abteilung durchgeführt. Der Radiologe ist verantwortlich für die Durchführung des Verfahrens, die Kommunikation mit dem Assistenten, um Anweisungen zu geben, und die Interaktion mit dem Patienten, um dessen Zustand zu überwachen und ihn ruhig zu halten. Der Assistent ist für die Vorbereitung steriler Materialien und die Bedienung des Röntgengeräts auf Anweisung des Radiologen zuständig. Der Patient ist die Person, die sich dem Verfahren unterzieht. Heute arbeitest du mit Patientin/Patient {self.system_patient} und Assistentin/Assistent {self.system_assistant}.
+* Personal: Die Port-Katheter-Platzierung wird von einem Radiologen und einem medizinischen Assistenten in der radiologischen Abteilung durchgeführt. Der Radiologe ist verantwortlich für die Durchführung des Verfahrens, die Kommunikation mit dem Assistenten, um Anweisungen zu geben, und die Interaktion mit dem Patienten, um dessen Zustand zu überwachen und ihn ruhig zu halten. Der Assistent ist für die Vorbereitung steriler Materialien und die Bedienung des Röntgengeräts auf Anweisung des Radiologen zuständig. Der Patient ist die Person, die sich dem Verfahren unterzieht. Heute arbeitest du mit Patientin/Patient <{self.patient}> und Assistentin/Assistent <{self.assistent}>.
 
 * Operation: Chirurgische Phasen und chirurgische Schritte darstellen eine typische Operation. Die Phasen beziehen sich auf die großen Abschnitte des Verfahrens, in denen die wichtigsten Schritte beschrieben werden. Chirurgische Schritte sind die spezifischen Aufgaben, die innerhalb jeder Phase ausgeführt werden sollen. Die Phasen und Schritte der Port-Katheter-Platzierung Operation sind folgendes:
     - Phase 0: Vorbereitung. Schritt 0.1 Positionierung des Patienten auf dem Tisch: Der Patient wird in eine stabile, komfortable Position gebracht, in Rückenlage. Dies ist wichtig für den Zugang zu den Venen und die Sicherheit während der Operation.
@@ -81,18 +79,18 @@ Das Ziel ist es, realistische und einzigartige Gespräche in einem Operationssaa
             prompt += "\n* Kontext: Du ahmst die Persona der angegebenen Person in der Spalte 'Person' nach, wenn du Sätze erzeugst. Personen in der Spalte „Person“, die miteinander sprechen, berücksichtige bei der Erstellung neuer Sätze frühere Unterhaltungen. Bisherige Gespräche:\n"
             prompt += f"\n<Daten>\n{step_df.tail(n_context).to_csv(index=True, sep=';', index_label='Index')}</Daten>\n"
             if step_label != 'Alltäglich':
-                prompt += f"\t Du wirst während der laufenden Operation über <{step_label}> insgesamt <{num2words(step_count, lang='de')}> Mal sprechen. Bisher <{num2words(sentence_idx+1, lang='de')}> Mal wurden gesprochen. Im Abschnitt <Antwort> wirst du beginnen die Generation den Sätze mit dem Index <{num2words(sentence_idx+2, lang='de')}>. Plane deine künftigen Gespräche entsprechend, indem du die Anzahl der Zeilen berücksichtigst, die du ausfüllen solltest.\n"
+                prompt += f"\t Du wirst in mehreren Teilen der laufenden Operation über <{step_label}> insgesamt <{num2words(step_count, lang='de')}> Mal sprechen. Bisher <{num2words(sentence_idx+1, lang='de')}> Mal wurden gesprochen. Plane den weiteren Verlauf der Operation entsprechend. Im Abschnitt <Antwort> wirst du die gegebene Zeile erzeugen.\n"
 
         prompt += """
 <Zusammenfassung>
 Schreib hier
     1. den Namen der Operation
-    2. Fasse den Sprachstil zusammen, den du simulieren wirst.
+    2. Fasse den Sprachstil des Radiologen zusammen, den du simulieren wirst.
     3. chirurgische Schritte im angegebenen Datenbereich, die durchgeführt werden sollen
 </Zusammenfassung>
 """
         if iteration:
-            prompt += """\nIn diesem Teil wirst du mit der Generierung des nächsten Abschnitts der Operationsdaten fortfahren. Fülle die angegebenen Daten im Abschnitt <Antwort> aus. Berücksichtige deine vorherige Antworte um konsistente Konversionen zu generieren.\n"""
+            prompt += """\nIn diesem Teil wirst du mit der Generierung des nächsten Abschnitts der Operationsdaten fortfahren. Fülle nur die angegebenen Daten im Abschnitt <Antwort> aus. Berücksichtige deine vorherige Antworte um konsistente Konversionen zu generieren.\n"""
         
         prompt += f"\n<Antwort>\n{answer_df.to_csv(index=True, sep=';', index_label='Index')}</Antwort>\n"
         
@@ -100,15 +98,15 @@ Schreib hier
 
 
     def get_assistant_prompt(self, iteration, step_df, answer_df, n_context=5):
-        prompt = f"""{self.system_assistant}
+        prompt = f"""
 
 Das Ziel ist es, realistische und einzigartige Gespräche in einem Operationssaal während einer Port-Katheter-Platzierung zu simulieren.
 
-* Personal: Die Port-Katheter-Platzierung wird von einem Radiologen und einem medizinischen Assistenten in der radiologischen Abteilung durchgeführt. Der Radiologe ist verantwortlich für die Durchführung des Verfahrens, die Kommunikation mit dem Assistenten, um Anweisungen zu geben, und die Interaktion mit dem Patienten, um dessen Zustand zu überwachen und ihn ruhig zu halten. Der Assistent ist für die Vorbereitung steriler Materialien und die Bedienung des Röntgengeräts auf Anweisung des Radiologen zuständig. Der Patient ist die Person, die sich dem Verfahren unterzieht. Heute arbeitest du mit Radiologin/Radiolog {self.system_radiologe} und Patientin/Patient {self.system_patient}.
+* Personal: Die Port-Katheter-Platzierung wird von einem Radiologen und einem medizinischen Assistenten in der radiologischen Abteilung durchgeführt. Der Radiologe ist verantwortlich für die Durchführung des Verfahrens, die Kommunikation mit dem Assistenten, um Anweisungen zu geben, und die Interaktion mit dem Patienten, um dessen Zustand zu überwachen und ihn ruhig zu halten. Der Assistent ist für die Vorbereitung steriler Materialien und die Bedienung des Röntgengeräts auf Anweisung des Radiologen zuständig. Der Patient ist die Person, die sich dem Verfahren unterzieht. Heute arbeitest du mit Radiologin/Radiolog <{self.radiologe}> und Patientin/Patient <{self.patient}>.
 
 * Daten: Du erhältst einen Datensatz mit fehlenden Unterhaltungen im Abschnitt <Antwort>. Die Daten enthalten einen Index, die Startzeit der Rede, eine Angabe wer spricht, den gesprochenen Satz, Bezeichnungen für die laufende Operationsschritte und die Operationsphase.
 
-* Aufgabe: Du wirst die Konversationen im Abschnitt <Antwort>, die mit '*Ausfüllen*' markiert sind, ergänzen. Die Splate 'Personen' zeigt, wer spricht gerade. Du berücksichtigst die bisherige Gespräche des Radiologen und Schritte und sprichst mit den Stil des vorgegebenen Personen.
+* Aufgabe: Du wirst die Konversationen im Abschnitt <Antwort>, die mit '*Ausfüllen*' markiert sind, ergänzen. Die Splate 'Personen' zeigt, wer spricht gerade. Du berücksichtigst die bisherige Gespräche des Radiologen und Schritte und sprichst mit den Stil des vorgegebenen Personen. Schreibe in jeder 'Text' Spalte ungefähr <{num2words(10, lang='de')} Wörter>.
 """
         if iteration:
             prompt += "\n* Kontext: Du ahmst die Persona der angegebenen Person in der Spalte 'Person' nach, wenn du Sätze erzeugst. Personen in der Spalte „Person“, die miteinander sprechen, berücksichtige bei der Erstellung neuer Sätze frühere Unterhaltungen. Bisherige Gespräche:"
@@ -120,15 +118,15 @@ Das Ziel ist es, realistische und einzigartige Gespräche in einem Operationssaa
 
 
     def get_patient_prompt(self, iteration, step_df, answer_df, n_context=5):
-        prompt = f"""{self.system_patient}
+        prompt = f"""
 
 Das Ziel ist es, realistische und einzigartige Gespräche in einem Operationssaal während einer Port-Katheter-Platzierung zu simulieren.
 
-* Personal: Die Port-Katheter-Platzierung wird von einem Radiologen und einem medizinischen Assistenten in der radiologischen Abteilung durchgeführt. Der Radiologe ist verantwortlich für die Durchführung des Verfahrens, die Kommunikation mit dem Assistenten, um Anweisungen zu geben, und die Interaktion mit dem Patienten, um dessen Zustand zu überwachen und ihn ruhig zu halten. Der Assistent ist für die Vorbereitung steriler Materialien und die Bedienung des Röntgengeräts auf Anweisung des Radiologen zuständig. Der Patient ist die Person, die sich dem Verfahren unterzieht. Heute arbeitest du mit Radiologin/Radiolog {self.system_radiologe} und Assistentin/Assistent {self.system_assistant}.
+* Personal: Die Port-Katheter-Platzierung wird von einem Radiologen und einem medizinischen Assistenten in der radiologischen Abteilung durchgeführt. Der Radiologe ist verantwortlich für die Durchführung des Verfahrens, die Kommunikation mit dem Assistenten, um Anweisungen zu geben, und die Interaktion mit dem Patienten, um dessen Zustand zu überwachen und ihn ruhig zu halten. Der Assistent ist für die Vorbereitung steriler Materialien und die Bedienung des Röntgengeräts auf Anweisung des Radiologen zuständig. Der Patient ist die Person, die sich dem Verfahren unterzieht. Heute arbeitest du mit Radiologin/Radiolog <{self.radiologe}> und Assistentin/Assistent <{self.assistent}>.
 
 * Daten: Du erhältst einen Datensatz mit fehlenden Unterhaltungen im Abschnitt <Antwort>. Die Daten enthalten einen Index, die Startzeit der Rede, eine Angabe wer spricht, den gesprochenen Satz, Bezeichnungen für die laufende Operationsschritte und die Operationsphase.
 
-* Aufgabe: Du wirst die Konversationen im Abschnitt <Antwort>, die mit '*Ausfüllen*' markiert sind, ergänzen. Die Splate 'Personen' zeigt, wer spricht gerade. Du berücksichtigst bisherige Gespräche und sprichst mit den Stil des vorgegebenen Personen.
+* Aufgabe: Du wirst die Konversationen im Abschnitt <Antwort>, die mit '*Ausfüllen*' markiert sind, ergänzen. Die Splate 'Personen' zeigt, wer spricht gerade. Du berücksichtigst bisherige Gespräche und sprichst mit den Stil des vorgegebenen Personen. Schreibe in jeder 'Text' Spalte ungefähr <{num2words(10, lang='de')} Wörter>.
 """
         if iteration:
             prompt += "\n* Kontext: Du ahmst die Persona der angegebenen Person in der Spalte 'Person' nach, wenn du Sätze erzeugst. Personen in der Spalte „Person“, die miteinander sprechen, berücksichtige bei der Erstellung neuer Sätze frühere Unterhaltungen. Bisherige Gespräche:"
