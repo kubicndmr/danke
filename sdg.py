@@ -2,7 +2,6 @@ import os
 import sys
 import time
 import torch
-import random
 import argparse
 import sdg_helper
 import sdg_prompts
@@ -24,7 +23,7 @@ if DEBUG_MODE:
 
 
 def get_answer(tokenizer, language_model, messages, max_new_tokens,
-               do_sample=True, top_p=0.95, temperature=1.25, repetition_penalty=1.1):
+               do_sample=True, top_p=0.95, temperature=1.2, repetition_penalty=1.1):
     """
     Generates a response from the model based on the provided chat history.
 
@@ -46,8 +45,7 @@ def get_answer(tokenizer, language_model, messages, max_new_tokens,
         messages, tokenize=False, add_generation_prompt=True)
 
     # Encode the prompt to input tensor
-    inputs = tokenizer(prompt, return_tensors="pt")
-    inputs['input_ids'] = inputs['input_ids'].to(language_model.device)
+    inputs = tokenizer.encode(prompt, return_tensors="pt")
 
     # Output
     if DEBUG_MODE:
@@ -57,7 +55,8 @@ def get_answer(tokenizer, language_model, messages, max_new_tokens,
 
     # Generate the model's response
     outputs = language_model.generate(
-        **inputs,
+        # **inputs,
+        input_ids=inputs.to(language_model.device),
         pad_token_id=tokenizer.eos_token_id,
         eos_token_id=tokenizer.eos_token_id,
         max_new_tokens=max_new_tokens,
@@ -69,7 +68,8 @@ def get_answer(tokenizer, language_model, messages, max_new_tokens,
 
     # Decode the model's output and update the chat history
     response = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    response = sdg_helper.extract_model_response(response)
+    response = sdg_helper.extract_model_response(
+        response, instruction_tag='model')
 
     # Output
     if DEBUG_MODE:
@@ -87,7 +87,7 @@ def gen_data(tokenizer, language_model, prompter, save_name):
     limit_try = 5
     tokens_per_row = 75
     template_tokens = 50
-    summary_tokens = 250
+    summary_tokens = 360
     prompter.init_OR()
 
     # Get op draft
@@ -108,13 +108,10 @@ def gen_data(tokenizer, language_model, prompter, save_name):
                         (df['Person'] == person)].shape[0]
 
         if person == 'Radiologe':
-            system_prompt = prompter.system_radiologe
             max_new_tokens = tokens_per_row*len(answer_df) + summary_tokens
         elif person == 'Assistent':
-            system_prompt = prompter.system_assistant
             max_new_tokens = tokens_per_row*len(answer_df) + template_tokens
         elif person == 'Patient':
-            system_prompt = prompter.system_patient
             max_new_tokens = tokens_per_row*len(answer_df) + template_tokens
         else:
             print('The person has a problem')
@@ -124,8 +121,7 @@ def gen_data(tokenizer, language_model, prompter, save_name):
             prompt = prompter.get_prompt(
                 person, False, None, answer_df, step_label, step_count)
                         
-            messages = [{"role": "system", "content": system_prompt}, 
-                        {"role": "user", "content": prompt}]
+            messages = [{"role": "user", "content": prompt}]
             messages_log = messages.copy()
 
         else:
@@ -137,14 +133,13 @@ def gen_data(tokenizer, language_model, prompter, save_name):
             prompt = prompter.get_prompt(
                 person, True, step_df, answer_df, step_label, step_count)
 
-            messages = [{"role": "system", "content": system_prompt}, 
-                        {"role": "user", "content": prompt}]
+            messages = [{"role": "user", "content": prompt}]
             messages_log.extend(messages)
 
         # Try limit_try times, if LM cant follow instructions
         n_try = 0
         while n_try < limit_try:
-            # if True:
+            #if True:
             try:
                 print(
                     f'\tStep: {int(i+1)}/{len(df_splits)}\t|\tMax new tokens: {max_new_tokens}')
@@ -178,7 +173,7 @@ def gen_data(tokenizer, language_model, prompter, save_name):
                 n_try = limit_try
                 steps_complete[i] = 1
 
-            # if False:
+            #if False:
             except:
                 if DEBUG_MODE:
                     with open(f'{save_name[:-4]}_Step_{i+1}_Try_{n_try}.txt', 'w') as f:
@@ -237,9 +232,9 @@ if __name__ == "__main__":
     error_patience = 3
     prefix_idx = args.prefix_index
     end_idx = prefix_idx + args.num_target - 1
-    model_id = 'mistralai/Mistral-Large-Instruct-2407'
+    # model_id = 'mistralai/Mistral-Large-Instruct-2407'
     # model_id = 'mistralai/Mistral-Nemo-Instruct-2407'
-    # model_id = 'google/gemma-2-27b-it'
+    model_id = 'google/gemma-2-27b-it'
     
     # Login huggingface environment
     load_dotenv()

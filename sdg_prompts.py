@@ -24,9 +24,11 @@ class SDGPrompts:
 
 
     def get_radiologe_prompt(self, iteration, step_df, answer_df, step_label, step_count, n_examples=3, n_context=25):
-        prompt = f"""Das Ziel ist es, realistische und einzigartige Gespräche in einem Operationssaal während einer Port-Katheter-Platzierung zu simulieren.
+        prompt = f"""{self.system_radiologe}
+        
+Das Ziel ist es, realistische, hochwertige, einzigartige, und medizinisch korrekte Gespräche in einem Operationssaal während einer Port-Katheter-Platzierung zu simulieren.
 
-* Personal: Die Port-Katheter-Platzierung wird von einem Radiologen und einem medizinischen Assistenten in der radiologischen Abteilung durchgeführt. Der Radiologe ist verantwortlich für die Durchführung des Verfahrens, die Kommunikation mit dem Assistenten, um Anweisungen zu geben, und die Interaktion mit dem Patienten, um dessen Zustand zu überwachen und ihn ruhig zu halten. Der Assistent ist für die Vorbereitung steriler Materialien und die Bedienung des Röntgengeräts auf Anweisung des Radiologen zuständig. Der Patient ist die Person, die sich dem Verfahren unterzieht. Heute arbeitest du mit Patientin/Patient <{self.patient}> und Assistentin/Assistent <{self.assistent}>.
+* Personal: Die Port-Katheter-Platzierung wird von einem Radiologen und einem medizinischen Assistenten in der radiologischen Abteilung durchgeführt. Der Radiologe ist verantwortlich für die Durchführung des Verfahrens, die Kommunikation mit dem Assistenten, um Anweisungen zu geben, und die Interaktion mit dem Patienten, um dessen Zustand zu überwachen und ihn ruhig zu halten. Der Assistent ist für die Vorbereitung steriler Materialien und die Bedienung des Röntgengeräts auf Anweisung des Radiologen zuständig. Der Patient ist die Person, die sich dem Verfahren unterzieht. Heute befinden sich die Patientin/der Patient <{self.patient}> und die Assistentin/der Assistent <{self.assistent}> im OP.
 
 * Operation: Chirurgische Phasen und chirurgische Schritte darstellen eine typische Operation. Die Phasen beziehen sich auf die großen Abschnitte des Verfahrens, in denen die wichtigsten Schritte beschrieben werden. Chirurgische Schritte sind die spezifischen Aufgaben, die innerhalb jeder Phase ausgeführt werden sollen. Die Phasen und Schritte der Port-Katheter-Platzierung Operation sind folgendes:
     - Phase 0: Vorbereitung. Schritt 0.1 Positionierung des Patienten auf dem Tisch: Der Patient wird in eine stabile, komfortable Position gebracht, in Rückenlage. Dies ist wichtig für den Zugang zu den Venen und die Sicherheit während der Operation.
@@ -59,34 +61,39 @@ class SDGPrompts:
     - Phase 7: Abschluss. Schritt 7.1 Steriles Pflaster auflegen: Über der Naht wird ein steriles Pflaster angebracht, um die Wunde zu schützen.
     - Phase 7: Abschluss. Schritt 7.2 Tisch fährt nach unten: Der Operationstisch wird abgesenkt, um den Patienten sicher vom Tisch zu transferieren.
     
-* Satzgruppen: Häufig verwendete Ausdrücke der Radiologen bei realen Operationen wurden extrahiert und ähnliche Sätze wurden gruppiert. Für die laufende Phase sind unten <{num2words(n_examples, lang='de')}> Beispielsätze mit Erklärungen angegeben:
-    {sdg_helper.sample_pocap_example(phase=answer_df['Phase'].iloc[0], n_examples=n_examples)}Achte darauf, ähnliche Ausdrücke zu verwenden, wenn sie bei der Bildung von Sätzen natürlich in den Kontext passen. Bevor du sie verwendest, solltest du jedoch bedenken, wie oft diese Ausdrücke normalerweise im Datensatz vorkommen. Dies wird dazu beitragen, dass der Text realistischer wirkt.
+* Satzgruppen: Häufig verwendete Ausdrücke der Radiologen bei realen Operationen wurden extrahiert und ähnliche Sätze der gleichen Phasen wurden gruppiert. Für die laufende Phase sind unten <{num2words(n_examples, lang='de')}> Beispielsätze mit Erklärungen angegeben:
+    {sdg_helper.sample_pocap_example(phase=answer_df['Phase'].iloc[0], n_examples=n_examples)}Achte darauf, ähnliche Ausdrücke zu verwenden, wenn sie bei der Bildung von Sätzen natürlich in den Kontext passen.
 
 * Daten: Du erhältst einen Datensatz mit fehlenden Unterhaltungen im Abschnitt <Antwort>. Die Daten enthalten einen Index, die Startzeit der Rede, eine Angabe wer spricht, den gesprochenen Satz, Bezeichnungen für die laufende Operationsschritte und die Operationsphase.
 
-* Aufgabe: Du wirst die Konversationen im Abschnitt <Antwort>, die mit '*Ausfüllen*' markiert sind, ergänzen. Die Splate 'Personen' zeigt, wer spricht gerade. Du berücksichtigst die chirurgischen Phasen und Schritte und sprichst mit den Stil des vorgegebenen Personen.
+* Aufgabe: Du wirst die Konversationen der Radiologen im Abschnitt <Antwort>, die mit '*Ausfüllen*' markiert sind, ergänzen, indem du die chirurgischen Phasen und Schritte berücksichtigst. Du ahmst die Persona des angegebenen Radiologen nach, wenn du Sätze erzeugst. Du wirst dann die Konversationen des gesamten Operation Teil für Teil erstellen. In diesem Teil wirst du die Daten für den angegebenen Abschnitt in der Vorlage <Antwort> generieren.
 
-* Strategie: Zunächst fasst du deine Aufgabe in dem Abschnitt <Zusammenfassung> zusammen. Du wirst dann die Konversationen des gesamten Operation Teil für Teil erstellen. In diesem Teil wirst du die Daten für den angegebenen Abschnitt in der Vorlage <Antwort> generieren. Schreibe in jeder 'Text' Spalte ungefähr <{num2words(10, lang='de')} Wörter>. Falls nötig und andere Zeilen verfügbar sind, nutze diese, um deine Antwort aufzuteilen. Um sicherzustellen, dass die generierten Sätze medizinisch korrekt sind, verwende die in den Spalten 'Schritt' und 'Phase' angegebenen Informationen und generiere geeignete Gespräche. Betrachte auch die angegebenen Satzgruppen, um sich inspirieren zu lassen. Wenn in der Spalte 'Schritt' bereits 'Alltäglich' steht, erstelle stattdessen einen themenfremden Satz, um ein alltägliches Gespräch mit den anderen Personen zu beginnen. Ein Themavorschlag ist: {self.topic}.
+* Strategie: Zunächst fasst du deine Aufgabe in dem Abschnitt <Zusammenfassung> zusammen. Danach fahre mit der Generierung von Sätzen fort. Während du Sätze bildest: 1) Lese frühere Gespräche sorgfältig durch, die im Punkt 'Kontext' unten gegeben sind. 2) Verstehe das Thema des laufenden Gesprächs. 3) Analysiere, inwieweit Fortschritte bei diesem Thema gemacht worden sind. Nutze dafür die Informationen im Punkt „Überblick“ unten. 4) Plane das Tempo des Fortschritts und der dazugehörenden Gespräche entsprechend. Erzähle nicht alles zu Beginn der Phase/Schritt und wiederhole es viele Male. Plane sorgfältig und verteile die notwendigen Aktivitäten auf vorgegebene leere Gesprächsfelder.
 
-* Format: Verwende die Vorlage im Abschnitt <Antwort> um deine Antwort zu geben und die Vorlage im Abschnitt <Zusammenfassung> um deine Zusammenfassung zu geben. Gib deine anwort nur auf Deutsch und nutze CSV-Format im Abschnitt <Antwort> wie in der Vorlage. Verwende immer die Tags <Antwort> und </Antwort> am Anfang und Ende deiner Antwort, und <Zusammenfassung> und </Zusammenfassung> am Anfang und Ende deiner Zusammenfassung.
+* Generation: Erzeuge natürliche Gespräche zwischen dem Patienten und dem Assistenten, beantworte ihre Fragen oder Kommentare. Vermeide unnötige Floskeln. Halte deine Sätze in angemessener Länge, schreibe in jeder Zeile <{num2words(5, lang='de')}-{num2words(7, lang='de')} Wörter>. Keine Emojis verwenden. Um sicherzustellen, dass die generierten Sätze medizinisch korrekt sind, verwende die in den Spalten 'Schritt' und 'Phase' angegebenen Informationen und generiere korrekte Gespräche. Betrachte auch die angegebenen Satzgruppen, um sich inspirieren zu lassen. Wenn in der Spalte 'Schritt' 'Alltäglich' steht, führe ein alltägliches Gespräch. Ein Themavorschlag ist: {self.topic}.
+
+* Format: Verwende die Vorlage im Abschnitt <Antwort> um deine Antwort zu geben und die Vorlage im Abschnitt <Zusammenfassung> um deine Zusammenfassung zu geben. Erzeuge nur die Vorlage mit der Überschrift in dem angegebenen <Antwort>-Abschnitt, füge keine neuen Zeilen hinzu. Gib deine anwort nur auf Deutsch und nutze CSV-Format im Abschnitt <Antwort> wie in der Vorlage. Verwende immer die Tags <Antwort> und </Antwort> am Anfang und Ende deiner Antwort, und <Zusammenfassung> und </Zusammenfassung> am Anfang und Ende deiner Zusammenfassung. Füge keine ``` codeblöcke oder ** Textblöcke hinzu, wenn sie nicht ausdrücklich dazu aufgefordert werden. Füge keine zusätzlichen Meldungen am Anfang oder Ende der Eingabeaufforderung ein.
 """
-        if self.problem != None:
-            prompt += f"\n* Problem: Während einer Operation in einem Operationssaal können viele Dinge unerwartet passieren. Heute wirst du simulieren, dass im OP folgende Komplikation auftritt: <{self.problem}>. Reagiere bei einer geeigneten Gelegenheit darauf.\n"
-
         if iteration:
             sentence_idx = step_df[(step_df['Schritt'] == step_label) &
                                    (step_df['Person'] == 'Radiologe')].shape[0]
-            prompt += "\n* Kontext: Du ahmst die Persona der angegebenen Person in der Spalte 'Person' nach, wenn du Sätze erzeugst. Personen in der Spalte „Person“, die miteinander sprechen, berücksichtige bei der Erstellung neuer Sätze frühere Unterhaltungen. Bisherige Gespräche:\n"
+            prompt += "\n* Kontext: Personen in der Spalte „Person“, die miteinander sprechen, berücksichtige bei der Erstellung neuer Sätze frühere Unterhaltungen. Bisherige Gespräche:\n"
             prompt += f"\n<Daten>\n{step_df.tail(n_context).to_csv(index=True, sep=';', index_label='Index')}</Daten>\n"
             if step_label != 'Alltäglich':
-                prompt += f"\t Du wirst in mehreren Teilen der laufenden Operation über <{step_label}> insgesamt <{num2words(step_count, lang='de')}> Mal sprechen. Bisher <{num2words(sentence_idx+1, lang='de')}> Mal wurden gesprochen. Plane den weiteren Verlauf der Operation entsprechend. Im Abschnitt <Antwort> wirst du die gegebene Zeile erzeugen.\n"
+                prompt += f"\t * Überblick: Du wirst in mehreren Teilen der laufenden Operation über <{step_label}> insgesamt <{num2words(step_count, lang='de')}> Mal sprechen. Bisher <{num2words(sentence_idx+1, lang='de')}> Mal wurden gesprochen. Plane den weiteren Verlauf der Operation entsprechend. Im Abschnitt <Antwort> wirst du die gegebene Zeile erzeugen.\n"
 
-        prompt += """
+        if self.problem != None:
+            prompt += f"\n* Problem: Während einer Operation in einem Operationssaal können viele Dinge unerwartet passieren. Heute wirst du simulieren, dass im OP folgende Komplikation auftritt: <{self.problem}>. Reagiere bei einer geeigneten Gelegenheit darauf.\n"
+
+        prompt += f"""
 <Zusammenfassung>
 Schreib hier
-    1. den Namen der Operation
-    2. Fasse den Sprachstil des Radiologen zusammen, den du simulieren wirst.
-    3. chirurgische Schritte im angegebenen Datenbereich, die durchgeführt werden sollen
+    1. Fasse den Sprachstil des Radiologen zusammen, den du simulieren wirst.
+    2. Was sind die chirurgische Schritte im angegebenen Datenbereich, die durchgeführt werden sollen?
+    3. Wie viel Mal wirst du über <{step_label}> sprechen?
+    4. Wie viel Mal hast du schon über <{step_label}> gesprochen?
+    5. Was ist das Thema des laufenden Gesprächs?
+    6. Was musst du bei der Generierung der Sätze beachten, um das Gespräch im richtigen Tempo voranzutreiben?
 </Zusammenfassung>
 """
         if iteration:
@@ -98,7 +105,7 @@ Schreib hier
 
 
     def get_assistant_prompt(self, iteration, step_df, answer_df, n_context=5):
-        prompt = f"""
+        prompt = f"""{self.assistent}
 
 Das Ziel ist es, realistische und einzigartige Gespräche in einem Operationssaal während einer Port-Katheter-Platzierung zu simulieren.
 
@@ -118,7 +125,7 @@ Das Ziel ist es, realistische und einzigartige Gespräche in einem Operationssaa
 
 
     def get_patient_prompt(self, iteration, step_df, answer_df, n_context=5):
-        prompt = f"""
+        prompt = f"""{self.system_patient}
 
 Das Ziel ist es, realistische und einzigartige Gespräche in einem Operationssaal während einer Port-Katheter-Platzierung zu simulieren.
 
