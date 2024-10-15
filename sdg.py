@@ -103,7 +103,10 @@ def gen_data(tokenizer, language_model, prompter, save_name):
             sdg_helper.surgical_phases)
 
         person = answer_df['Person'].iloc[0]
-        step_label = answer_df['Schritt'].iloc[0]
+        if (answer_df['Schritt'] != 'Alltäglich').any():
+            step_label = answer_df.loc[answer_df['Schritt'] != 'Alltäglich', 'Schritt'].iloc[0]
+        else:
+            step_label = 'Alltäglich'
         step_count = df[(df['Schritt'] == step_label) &
                         (df['Person'] == person)].shape[0]
 

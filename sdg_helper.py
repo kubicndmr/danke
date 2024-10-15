@@ -340,10 +340,29 @@ def sample_problem(complication_probability=0.3):
         return None
 
 
+def sample_real_phase(step_label, n_context=25):
+    for i in range(8):
+        if step_label in surgical_steps[i]:
+            phase = i
+    
+    phase_df_len = 0
+    while phase_df_len < 5:
+        random_op  = random.choice(transcripts)
+        df = pd.read_csv(random_op, index_col=0)
+        phase_df = df[df['Phase_Label'] == phase].copy()
+        phase_df = phase_df[phase_df['Text'] != '<nicht verstanden>']
+        phase_df_len = len(phase_df)
+    
+    phase_df['Phase'] = phase_df['Phase_Label'].map(surgical_phases)
+    phase_df = phase_df.drop(columns=['File_Name', 'End_Time', 'Phase_Label'])
+    
+    return phase_df.head(n_context).to_csv(index=True, sep=';', index_label='Index')
+
+
 def draft_OP():
     phase_dfs = []
-    patient_percentage = random.choice([0.25, 0.3, 0.35, 0.4])
-    assistant_percentage = random.choice([0.25, 0.3, 0.35, 0.4])
+    patient_percentage = random.choice([0.1, 0.125, 0.15, 0.175])
+    assistant_percentage = random.choice([0.1, 0.125, 0.15, 0.175])
     phase_lengths, phase_length_scale = sample_phase_lengths()
     daily_percentage = sample_daily_percentage()
     time_stamps = sample_time_stamps(phase_lengths)

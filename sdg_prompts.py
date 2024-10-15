@@ -23,6 +23,58 @@ class SDGPrompts:
         self.init_personal_prompts()
 
 
+    def get_step_description(self, step_label):
+        if step_label in sdg_helper.surgical_steps[0]:
+            return """
+    - Schritt 0.1 Positionierung des Patienten auf dem Tisch: Der Patient wird in eine stabile, komfortable Position gebracht, in Rückenlage.
+    - Schritt 0.2 Tisch fährt hoch: Der Operationstisch wird auf eine ergonomische Höhe für den Radiologen und Assistenten gebracht, um den Eingriff effizient durchzuführen.
+    - Schritt 0.3 Radiologe sterilisiert sich: Der Radiologe, der die Operation übernimmt, bereitet sich durch Sterilisation und Anziehen steriler Kleidung vor, um Infektionen zu verhindern.
+    - Schritt 0.4 Vorbereitung des sterilen Materials: Alle benötigten Materialien (Katheter, Nadeln, Nahtmaterial, etc.) werden in einem sterilen Feld vorbereitet, um eine Kontamination zu vermeiden.
+    - Schritt 0.5 Patient steril abgedeckt: Der Patient wird steril abgedeckt, damit nur der operative Bereich freiliegt. Dies reduziert das Risiko von Infektionen."""
+        elif step_label in sdg_helper.surgical_steps[1]:
+            return """
+    - Schritt 1.1 Lokale Anästhesie: Das operative Gebiet wird lokal betäubt, um den Patienten während des Eingriffs schmerzfrei zu halten.
+    - Schritt 1.2 Ultraschallgeführte Punktion: Mit Ultraschall wird die Zielvene (meist die Vena subclavia oder die Vena jugularis interna) angesteuert und punktiert. Diese Methode verbessert die Sicherheit und Präzision, da der Zugang zur Vene sichtbar kontrolliert wird."""
+        elif step_label in sdg_helper.surgical_steps[2]:
+            return """
+    - Schritt 2.1 Röntgenmaschine fährt ein: Die Röntgenmaschine wird in Position gebracht, um die nachfolgenden Schritte bildgebend zu überwachen.
+    - Schritt 2.2 Durchleuchtung im Bereich der Subklavia: Eine Durchleuchtung stellt sicher, dass der Führungsdraht korrekt in die Vene eingeführt wird.
+    - Schritt 2.3 Durchleuchtung im Bereich der Vena cava inferior (VCI): Der Führungsdraht wird bis zur Vena cava inferior vorgeschoben, um die spätere Position des Katheters zu bestätigen.
+    - Schritt 2.4 Röntgenmaschine fährt heraus: Nach erfolgreicher Platzierung des Drahtes wird die Röntgenmaschine für den nächsten Schritt zurückgezogen."""
+        elif step_label in sdg_helper.surgical_steps[3]:
+            return """
+    - Schritt 3.1 Lokale Anästhesie: Das Gebiet über dem Schlüsselbein wird lokal betäubt, um den Schnitt für die Portkammer vorzubereiten.
+    - Schritt 3.2 Inzision: Es wird ein Hautschnitt durchgeführt, um Zugang zum Unterhautgewebe zu schaffen, wo der Port später platziert wird.
+    - Schritt 3.3 Pouch-Vorbereitung: Mit einem stumpfen Präparierinstrument wird eine kleine Tasche im Gewebe geschaffen, um Platz für die Portkammer zu machen.
+    - Schritt 3.4 Hülleplatzierung: Eine Hülse (Schleuse) wird um den Führungsdraht gelegt, um den Katheter über den Draht in die Vene einzuführen."""
+        elif step_label in sdg_helper.surgical_steps[4]:
+            return """
+    - Shritt 4.1 Röntgenmaschine fährt ein: Die Röntgenmaschine wird erneut aktiviert, um die Platzierung des Katheters zu überwachen.
+    - Shritt 4.2 Durchleuchtung des VCI-Bereichs: Die Position des Katheters in der Vena cava inferior wird überprüft, um sicherzustellen, dass er korrekt platziert ist.
+    - Shritt 4.3 Positionierung des Katheters: Der Katheter wird bis in die richtige Tiefe vorgeschoben, meist knapp oberhalb der rechten Herzvorhofgrenze."""
+        elif step_label in sdg_helper.surgical_steps[5]:
+            return """
+    - Schritt 5.1 Kürzen des Katheters: Der Katheter wird auf die richtige Länge gekürzt, um eine optimale Funktion und Platzierung zu gewährleisten.
+    - Schritt 5.2 Röntgenmaschine fährt aus: Die Bildgebung wird abgeschlossen, da die endgültige Katheterplatzierung gesichert ist.
+    - Schritt 5.3 Anschluss des Katheters an die Portkapsel: Der Katheter wird mit der Portkapsel verbunden, die das Medikament später in den Blutkreislauf leitet.
+    - Schritt 5.4 Positionierung der Portkapsel im Pouch: Die Portkapsel wird in den zuvor geschaffenen Pouch implantiert und fixiert.
+    - Schritt 5.5 Chirurgische Naht: Der Hautschnitt wird in mehreren Schichten vernäht, um die Implantationsstelle zu verschließen.
+    - Schritt 5.6 Punktion der Portkapsel: Zum Testen der Portfunktion wird die Kapsel punktiert, um sicherzustellen, dass alles korrekt verbunden ist."""
+        elif step_label in sdg_helper.surgical_steps[6]:
+            return """
+    - Schritt 6.1 Röntgenmaschine fährt ein: Die Röntgenmaschine wird aktiviert, um die Funktion des Katheters zu überprüfen.
+    - Schritt 6.2 Digitale Subtraktionsangiographie des Brustbereichs: Eine Kontrastmittelgabe mit digitaler Subtraktionsangiographie stellt sicher, dass der Katheter durchgängig und richtig platziert ist.
+    - Schritt 6.3 Röntgenmaschine fährt in Parkposition aus: Nach der abschließenden Überprüfung wird die Röntgenmaschine endgültig deaktiviert."""
+        elif step_label in sdg_helper.surgical_steps[7]:
+            return """
+    - Schritt 7.1 Steriles Pflaster auflegen: Über der Naht wird ein steriles Pflaster angebracht, um die Wunde zu schützen.
+    - Schritt 7.2 Tisch fährt nach unten: Der Operationstisch wird abgesenkt, um den Patienten sicher vom Tisch zu transferieren."""
+        elif step_label == 'Alltäglich':
+            pass
+        else:
+            raise ValueError('Etwas ist schiefgelaufen')
+
+
     def get_radiologe_prompt(self, iteration, step_df, answer_df, step_label, step_count, n_examples=3, n_context=25):
         prompt = f"""{self.system_radiologe}
         
@@ -30,47 +82,47 @@ Das Ziel ist es, realistische, hochwertige, einzigartige, und medizinisch korrek
 
 * Personal: Die Port-Katheter-Platzierung wird von einem Radiologen und einem medizinischen Assistenten in der radiologischen Abteilung durchgeführt. Der Radiologe ist verantwortlich für die Durchführung des Verfahrens, die Kommunikation mit dem Assistenten, um Anweisungen zu geben, und die Interaktion mit dem Patienten, um dessen Zustand zu überwachen und ihn ruhig zu halten. Der Assistent ist für die Vorbereitung steriler Materialien und die Bedienung des Röntgengeräts auf Anweisung des Radiologen zuständig. Der Patient ist die Person, die sich dem Verfahren unterzieht. Heute befinden sich die Patientin/der Patient <{self.patient}> und die Assistentin/der Assistent <{self.assistent}> im OP.
 
-* Operation: Chirurgische Phasen und chirurgische Schritte darstellen eine typische Operation. Die Phasen beziehen sich auf die großen Abschnitte des Verfahrens, in denen die wichtigsten Schritte beschrieben werden. Chirurgische Schritte sind die spezifischen Aufgaben, die innerhalb jeder Phase ausgeführt werden sollen. Die Phasen und Schritte der Port-Katheter-Platzierung Operation sind folgendes:
-    - Phase 0: Vorbereitung. Schritt 0.1 Positionierung des Patienten auf dem Tisch: Der Patient wird in eine stabile, komfortable Position gebracht, in Rückenlage. Dies ist wichtig für den Zugang zu den Venen und die Sicherheit während der Operation.
-    - Phase 0: Vorbereitung. Schritt 0.2 Tisch fährt hoch: Der Operationstisch wird auf eine ergonomische Höhe für den Radiologen und Assistenten gebracht, um den Eingriff effizient durchzuführen.
-    - Phase 0: Vorbereitung. Schritt 0.3 Radiologe sterilisiert sich: Der Radiologe, der die Operation übernimmt, bereitet sich durch Sterilisation und Anziehen steriler Kleidung vor, um Infektionen zu verhindern.
-    - Phase 0: Vorbereitung. Schritt 0.4 Vorbereitung des sterilen Materials: Alle benötigten Materialien (Katheter, Nadeln, Nahtmaterial, etc.) werden in einem sterilen Feld vorbereitet, um eine Kontamination zu vermeiden.
-    - Phase 0: Vorbereitung. Schritt 0.5 Patient steril abgedeckt: Der Patient wird steril abgedeckt, damit nur der operative Bereich freiliegt. Dies reduziert das Risiko von Infektionen.
-    - Phase 1: Punktion. Schritt 1.1 Lokale Anästhesie: Das operative Gebiet wird lokal betäubt, um den Patienten während des Eingriffs schmerzfrei zu halten.
-    - Phase 1: Punktion. Schritt 1.2 Ultraschallgeführte Punktion: Mit Ultraschall wird die Zielvene (meist die Vena subclavia oder die Vena jugularis interna) angesteuert und punktiert. Diese Methode verbessert die Sicherheit und Präzision, da der Zugang zur Vene sichtbar kontrolliert wird.
-    - Phase 2: Führungsdraht. Schritt 2.1 Röntgenmaschine fährt ein: Die Röntgenmaschine wird in Position gebracht, um die nachfolgenden Schritte bildgebend zu überwachen.
-    - Phase 2: Führungsdraht. Schritt 2.2 Durchleuchtung im Bereich der Subklavia: Eine Durchleuchtung stellt sicher, dass der Führungsdraht korrekt in die Vene eingeführt wird.
-    - Phase 2: Führungsdraht. Schritt 2.3 Durchleuchtung im Bereich der Vena cava inferior (VCI): Der Führungsdraht wird bis zur Vena cava inferior vorgeschoben, um die spätere Position des Katheters zu bestätigen.
-    - Phase 2: Führungsdraht. Schritt 2.4 Röntgenmaschine fährt heraus: Nach erfolgreicher Platzierung des Drahtes wird die Röntgenmaschine für den nächsten Schritt zurückgezogen.
-    - Phase 3: Pouchvorbereitung-und-Katheterplatzierung. Schritt 3.1 Lokale Anästhesie: Das Gebiet über dem Schlüsselbein wird lokal betäubt, um den Schnitt für die Portkammer vorzubereiten.
-    - Phase 3: Pouchvorbereitung-und-Katheterplatzierung. Schritt 3.2 Inzision: Es wird ein Hautschnitt durchgeführt, um Zugang zum Unterhautgewebe zu schaffen, wo der Port später platziert wird.
-    - Phase 3: Pouchvorbereitung-und-Katheterplatzierung. Schritt 3.3 Pouch-Vorbereitung: Mit einem stumpfen Präparierinstrument wird eine kleine Tasche im Gewebe geschaffen, um Platz für die Portkammer zu machen.
-    - Phase 3: Pouchvorbereitung-und-Katheterplatzierung. Schritt 3.4 Hülleplatzierung: Eine Hülse (Schleuse) wird um den Führungsdraht gelegt, um den Katheter über den Draht in die Vene einzuführen.
-    - Phase 4: Katheterpositionierung. Shritt 4.1 Röntgenmaschine fährt ein: Die Röntgenmaschine wird erneut aktiviert, um die Platzierung des Katheters zu überwachen.
-    - Phase 4: Katheterpositionierung. Shritt 4.2 Durchleuchtung des VCI-Bereichs: Die Position des Katheters in der Vena cava inferior wird überprüft, um sicherzustellen, dass er korrekt platziert ist.
-    - Phase 4: Katheterpositionierung. Shritt 4.3 Positionierung des Katheters: Der Katheter wird bis in die richtige Tiefe vorgeschoben, meist knapp oberhalb der rechten Herzvorhofgrenze.
-    - Phase 5: Katheteranpassung. Schritt 5.1 Kürzen des Katheters: Der Katheter wird auf die richtige Länge gekürzt, um eine optimale Funktion und Platzierung zu gewährleisten.
-    - Phase 5: Katheteranpassung. Schritt 5.2 Röntgenmaschine fährt aus: Die Bildgebung wird abgeschlossen, da die endgültige Katheterplatzierung gesichert ist.
-    - Phase 5: Katheteranpassung. Schritt 5.3 Anschluss des Katheters an die Portkapsel: Der Katheter wird mit der Portkapsel verbunden, die das Medikament später in den Blutkreislauf leitet.
-    - Phase 5: Katheteranpassung. Schritt 5.4 Positionierung der Portkapsel im Pouch: Die Portkapsel wird in den zuvor geschaffenen Pouch implantiert und fixiert.
-    - Phase 5: Katheteranpassung. Schritt 5.5 Chirurgische Naht: Der Hautschnitt wird in mehreren Schichten vernäht, um die Implantationsstelle zu verschließen.
-    - Phase 5: Katheteranpassung. Schritt 5.6 Punktion der Portkapsel: Zum Testen der Portfunktion wird die Kapsel punktiert, um sicherzustellen, dass alles korrekt verbunden ist.
-    - Phase 6: Katheterkontrolle. Schritt 6.1 Röntgenmaschine fährt ein: Die Röntgenmaschine wird aktiviert, um die Funktion des Katheters zu überprüfen.
-    - Phase 6: Katheterkontrolle. Schritt 6.2 Digitale Subtraktionsangiographie des Brustbereichs: Eine Kontrastmittelgabe mit digitaler Subtraktionsangiographie stellt sicher, dass der Katheter durchgängig und richtig platziert ist.
-    - Phase 6: Katheterkontrolle. Schritt 6.3 Röntgenmaschine fährt in Parkposition aus: Nach der abschließenden Überprüfung wird die Röntgenmaschine endgültig deaktiviert.
-    - Phase 7: Abschluss. Schritt 7.1 Steriles Pflaster auflegen: Über der Naht wird ein steriles Pflaster angebracht, um die Wunde zu schützen.
-    - Phase 7: Abschluss. Schritt 7.2 Tisch fährt nach unten: Der Operationstisch wird abgesenkt, um den Patienten sicher vom Tisch zu transferieren.
-    
-* Satzgruppen: Häufig verwendete Ausdrücke der Radiologen bei realen Operationen wurden extrahiert und ähnliche Sätze der gleichen Phasen wurden gruppiert. Für die laufende Phase sind unten <{num2words(n_examples, lang='de')}> Beispielsätze mit Erklärungen angegeben:
-    {sdg_helper.sample_pocap_example(phase=answer_df['Phase'].iloc[0], n_examples=n_examples)}Achte darauf, ähnliche Ausdrücke zu verwenden, wenn sie bei der Bildung von Sätzen natürlich in den Kontext passen.
+* Operation: Chirurgische Phasen und chirurgische Schritte darstellen eine typische Operation. Die Phasen beziehen sich auf die großen Abschnitte des Verfahrens, in denen die wichtigsten Schritte beschrieben werden. Chirurgische Schritte sind die spezifischen Aufgaben, die innerhalb jeder Phase ausgeführt werden sollen. Die Phasen der Port-Katheter-Platzierungsoperation sind folgende:
+    - Phase 0 Vorbereitung: In dieser Phase wird der Patient vorbereitet, das Operationsgebiet sterilisiert, und das notwendige Equipment bereitgestellt.
+    - Phase 1 Punktion: Der Radiologe punktiert die Haut und das darunterliegende Gewebe, um Zugang zur Vene zu erhalten.
+    - Phase 2 Führungsdraht: Ein Führungsdraht wird vorsichtig durch die Punktionsstelle in die Vene eingeführt, um den Katheterweg zu sichern.
+    - Phase 3 Pouchvorbereitung und Katheterplatzierung: Ein subkutaner Pouch wird vorbereitet, und der Port-Katheter wird an die richtige Position gebracht.
+    - Phase 4 Katheterpositionierung: Der Katheter wird endgültig positioniert, sodass die Verbindung zwischen Port und Vene gesichert ist.
+    - Phase 5 Katheteranpassung: Der Katheter wird auf die richtige Länge zugeschnitten und an den Port angeschlossen.
+    - Phase 6 Katheterkontrolle: Die Position des Katheters wird mittels Bildgebung kontrolliert, um eine korrekte Platzierung zu gewährleisten.
+    - Phase 7 Abschluss: Die Wunde wird geschlossen, und der Eingriff wird abgeschlossen. Der Patient wird aus dem sterilen Bereich entlassen.
 
+Die chirurgischen Schritte der laufenden Phase sind: {self.get_step_description(step_label)}"""
+
+        if step_label != 'Alltäglich':
+            prompt += f"""
+* reale Daten: Im Folgenden findest du ein Beispiel für reale Gespräche, die ein Radiologe in der laufenden Phase geführt hat:
+<reale Daten>
+{sdg_helper.sample_real_phase(step_label)}</reale Daten>
+
+* Satzgruppen: Häufig verwendete Ausdrücke der Radiologen bei realen Operationen wurden extrahiert und ähnliche Sätze der gleichen Phasen wurden gruppiert. Für die laufende Phase sind unten <{num2words(n_examples, lang='de')}> Beispielsätze mit Erklärungen angegeben:
+    {sdg_helper.sample_pocap_example(phase=answer_df['Phase'].iloc[0], n_examples=n_examples)}
+"""
+
+        prompt += """
 * Daten: Du erhältst einen Datensatz mit fehlenden Unterhaltungen im Abschnitt <Antwort>. Die Daten enthalten einen Index, die Startzeit der Rede, eine Angabe wer spricht, den gesprochenen Satz, Bezeichnungen für die laufende Operationsschritte und die Operationsphase.
 
 * Aufgabe: Du wirst die Konversationen der Radiologen im Abschnitt <Antwort>, die mit '*Ausfüllen*' markiert sind, ergänzen, indem du die chirurgischen Phasen und Schritte berücksichtigst. Du ahmst die Persona des angegebenen Radiologen nach, wenn du Sätze erzeugst. Du wirst dann die Konversationen des gesamten Operation Teil für Teil erstellen. In diesem Teil wirst du die Daten für den angegebenen Abschnitt in der Vorlage <Antwort> generieren.
 
-* Strategie: Zunächst fasst du deine Aufgabe in dem Abschnitt <Zusammenfassung> zusammen. Danach fahre mit der Generierung von Sätzen fort. Während du Sätze bildest: 1) Lese frühere Gespräche sorgfältig durch, die im Punkt 'Kontext' unten gegeben sind. 2) Verstehe das Thema des laufenden Gesprächs. 3) Analysiere, inwieweit Fortschritte bei diesem Thema gemacht worden sind. Nutze dafür die Informationen im Punkt „Überblick“ unten. 4) Plane das Tempo des Fortschritts und der dazugehörenden Gespräche entsprechend. Erzähle nicht alles zu Beginn der Phase/Schritt und wiederhole es viele Male. Plane sorgfältig und verteile die notwendigen Aktivitäten auf vorgegebene leere Gesprächsfelder.
+* Strategie: Zunächst fasst du deine Aufgabe in dem Abschnitt <Zusammenfassung> zusammen. Danach fahre mit der Generierung von Sätzen fort. Während du Sätze bildest: 1) Lies reale Gespräche im <reale Daten>-Abschnitt sorgfältig durch und verstehe, wie die Radiologen kommunizieren. 2) Lies frühere Gespräche, die im Punkt 'Kontext' unten gegeben sind, und analysiere, inwieweit Fortschritte bei diesem Thema gemacht worden sind. Nutze dafür die Informationen im Punkt „Überblick“ unten. 3) Plane das Tempo des Fortschritts und der dazugehörenden Gespräche entsprechend. Erzähle nicht alles zu Beginn der Phase/Schritt und wiederhole es viele Male. Plane sorgfältig und verteile die notwendigen Aktivitäten auf vorgegebene leere Gesprächsfelder. 4) Generiere Säzte. Verwende dein Verständnis und die Analyse der vorherigen drei Punkte bei der Satzbildung.
 
-* Generation: Erzeuge natürliche Gespräche zwischen dem Patienten und dem Assistenten, beantworte ihre Fragen oder Kommentare. Vermeide unnötige Floskeln. Halte deine Sätze in angemessener Länge, schreibe in jeder Zeile <{num2words(5, lang='de')}-{num2words(7, lang='de')} Wörter>. Keine Emojis verwenden. Um sicherzustellen, dass die generierten Sätze medizinisch korrekt sind, verwende die in den Spalten 'Schritt' und 'Phase' angegebenen Informationen und generiere korrekte Gespräche. Betrachte auch die angegebenen Satzgruppen, um sich inspirieren zu lassen. Wenn in der Spalte 'Schritt' 'Alltäglich' steht, führe ein alltägliches Gespräch. Ein Themavorschlag ist: {self.topic}.
+* Sprache [SEHR WICHTIG!]:
+    - Erzeuge natürliche Gespräche mit dem Patienten und dem Assistenten, und beantworte ihre Fragen oder Kommentare. 
+    - Achte darauf, dass der Übergang zwischen den Phasen und Schritten natürlich erfolgt.
+    - Halte deine Sätze in angemessener Länge. SCHREIBE IN JEDER TEXTFELD DURCHSCHNITTLICH <{num2words(7, lang='de').upper()}-{num2words(8, lang='de').upper()} WÖRTER>.
+    - Um sicherzustellen, dass die generierten Sätze medizinisch korrekt sind, verwende die in den Spalten 'Schritt' und 'Phase' angegebenen Informationen und generiere korrekte Gespräche.
+    - Fokus liegt auf präzisen medizinischen Anweisungen. Spreche präzise und direkt.
+    - Bewahre in deinen Gesprächen einen neutralen Ton, spreche nicht übermäßig positiv oder negativ.
+    - Wenn in der Spalte 'Schritt' 'Alltäglich' steht, führe ein alltägliches Gespräch. Fahre immer mit dem letzten Gesprächspunkt fort.
+    - Betrachte auch die angegebenen Satzgruppen, um sich inspirieren zu lassen. 
+    - Impliziere deine Handlungen manchmal, anstatt sie ausdrücklich zu sagen.
+    - Vermeide unnötige Floskeln.
+    - Verwende keine Emojis.
 
 * Format: Verwende die Vorlage im Abschnitt <Antwort> um deine Antwort zu geben und die Vorlage im Abschnitt <Zusammenfassung> um deine Zusammenfassung zu geben. Erzeuge nur die Vorlage mit der Überschrift in dem angegebenen <Antwort>-Abschnitt, füge keine neuen Zeilen hinzu. Gib deine anwort nur auf Deutsch und nutze CSV-Format im Abschnitt <Antwort> wie in der Vorlage. Verwende immer die Tags <Antwort> und </Antwort> am Anfang und Ende deiner Antwort, und <Zusammenfassung> und </Zusammenfassung> am Anfang und Ende deiner Zusammenfassung. Füge keine ``` codeblöcke oder ** Textblöcke hinzu, wenn sie nicht ausdrücklich dazu aufgefordert werden. Füge keine zusätzlichen Meldungen am Anfang oder Ende der Eingabeaufforderung ein.
 """
@@ -90,10 +142,8 @@ Das Ziel ist es, realistische, hochwertige, einzigartige, und medizinisch korrek
 Schreib hier
     1. Fasse den Sprachstil des Radiologen zusammen, den du simulieren wirst.
     2. Was sind die chirurgische Schritte im angegebenen Datenbereich, die durchgeführt werden sollen?
-    3. Wie viel Mal wirst du über <{step_label}> sprechen?
-    4. Wie viel Mal hast du schon über <{step_label}> gesprochen?
-    5. Was ist das Thema des laufenden Gesprächs?
-    6. Was musst du bei der Generierung der Sätze beachten, um das Gespräch im richtigen Tempo voranzutreiben?
+    3. Was sind die vier Punkte deiner Strategie bei der Satzbildung?
+    4. Was ist die durchschnittliche Länge der Sätze, die du generieren wirst?
 </Zusammenfassung>
 """
         if iteration:
@@ -105,7 +155,7 @@ Schreib hier
 
 
     def get_assistant_prompt(self, iteration, step_df, answer_df, n_context=5):
-        prompt = f"""{self.assistent}
+        prompt = f"""{self.system_assistant}
 
 Das Ziel ist es, realistische und einzigartige Gespräche in einem Operationssaal während einer Port-Katheter-Platzierung zu simulieren.
 
