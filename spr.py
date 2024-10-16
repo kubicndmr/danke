@@ -1,3 +1,4 @@
+import os
 import data
 import wandb
 import utils
@@ -46,6 +47,10 @@ if __name__ == '__main__':
                         type=int, default=256,
                         help='hidden vector size of model')
 
+    parser.add_argument('-r', '--repeat_run',
+                        type=int, default=5,
+                        help='Number of times repeat training and average results')
+
     parser.add_argument('-no', '--num_ops',
                         type=int, default=-1,
                         help='Number of OPs to use in training')
@@ -60,172 +65,217 @@ if __name__ == '__main__':
                         help='path to test set')
 
     args = parser.parse_args()
-
-    # Init output folder
-    output_path, log_txt = utils.init_log(args)
-
-    # wandb
-    wandb.init(name=output_path)
+        
+    # wandb init
+    wandb.init()
     wandb.config.update(args)
-
-    # Data
-    data_path = {'train': args.trainset_path,
-                 'valid': args.validset_path, 'test': args.testset_path}
-
-    trainset, validset, testset = data.get_dataset(data_path,
-                                                   log_txt,
-                                                   args.num_ops,
-                                                   args.batch_size
-                                                   )
-    num_classes = 9
 
     # Model
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    surgical_model = model.SLPNet(
-        model_dim=args.model_dim,
-        num_classes=num_classes,
-        model_dropout=args.model_dropout,
-        sentence_dropout=args.sentence_dropout
-    ).to(device)
-    utils.print_log('\n---{ Model }---', log_txt)
-    utils.print_log(surgical_model, log_txt)
-    utils.print_log('\nNumber of Parameters: {:,}\n'.format(sum(p.numel()
-                    for p in surgical_model.parameters() if p.requires_grad)),
-                    log_txt)
-    utils.print_log('\n---{ \Model }---', log_txt)
 
-    # Loss function
-    phase_weights = utils.phase_weights(trainset).to(device)
-    criteria = torch.nn.CrossEntropyLoss(
-        weight=phase_weights, reduction='mean', ignore_index=8)
+    # Average results over runs
+    avg_train_loss = np.zeros((args.repeat_run, args.epochs))
+    avg_valid_loss = np.zeros((args.repeat_run, args.epochs))
+    avg_accuracy = np.zeros((args.repeat_run, args.epochs))
+    avg_f1 = np.zeros((args.repeat_run, args.epochs))
+    avg_jaccard = np.zeros((args.repeat_run, args.epochs))
 
-    # Optimizer
-    optimizer = torch.optim.Adam(
-        surgical_model.parameters(),
-        lr=args.learning_rate,
-        weight_decay=args.weight_decay
-    )
+    for run in range(args.repeat_run):
+        # Init output folder
+        output_path, log_txt = utils.init_log(args, run)
 
-    # Training
-    metrics_train = metrics.SPRMetrics(log_txt, output_path, args.epochs)
-    metrics_valid = metrics.SPRMetrics(log_txt, output_path, args.epochs)
-    error_train = torch.zeros(args.epochs).to(device)
-    error_valid = torch.zeros(args.epochs).to(device)
-    early_stopper_flag = False
-    patience_limit = 5
-    patience_escb = 0
-    delta_escb = 0.001
-    best_loss = 1E9
-    epoch = 0
+        # Data
+        data_path = {'train': args.trainset_path,
+                     'valid': args.validset_path,
+                     'test': args.testset_path
+                     }
 
-    trainset_size = np.sum([d_l.dataset.__len__() for d_l in trainset])
-    validset_size = np.sum([d_l.dataset.__len__() for d_l in validset])
+        trainset, validset, testset = data.get_dataset(data_path,
+                                                       log_txt,
+                                                       args.num_ops,
+                                                       args.batch_size
+                                                       )
+        num_classes = 9
 
-    # Iter epochs
-    while (epoch < args.epochs) and (early_stopper_flag == False):
-        utils.print_log(
-            "\n\nEpoch\t: {}/{}".format(epoch+1, args.epochs),
-            log_txt,
-            display=True
+        # Initialize model for each run
+        surgical_model = model.SLPNet(
+            model_dim=args.model_dim,
+            num_classes=num_classes,
+            model_dropout=args.model_dropout,
+            sentence_dropout=args.sentence_dropout
+        ).to(device)
+
+        utils.print_log('\n---{ Model }---', log_txt)
+        utils.print_log(surgical_model, log_txt)
+        utils.print_log('\nNumber of Parameters: {:,}\n'.format(sum(p.numel()
+                        for p in surgical_model.parameters() if p.requires_grad)),
+                        log_txt)
+
+        # Loss function
+        phase_weights = utils.phase_weights(trainset).to(device)
+        criteria = torch.nn.CrossEntropyLoss(
+            weight=phase_weights, reduction='mean', ignore_index=8)
+
+        # Optimizer
+        optimizer = torch.optim.Adam(
+            surgical_model.parameters(),
+            lr=args.learning_rate,
+            weight_decay=args.weight_decay
         )
 
-        print('\nTraining...')
-        surgical_model.train()
-        for i, data_loader in enumerate(trainset):
-            print("\t\tEpoch progress: {:.2f} %".format(
-                (i+1)/len(trainset)*100), end='\r')
+        # Training
+        metrics_train = metrics.SPRMetrics(log_txt, output_path, args.epochs)
+        metrics_valid = metrics.SPRMetrics(log_txt, output_path, args.epochs)
+        error_train = torch.zeros(args.epochs).to(device)
+        error_valid = torch.zeros(args.epochs).to(device)
+        early_stopper_flag = False
+        patience_limit = 5
+        patience_escb = 0
+        delta_escb = 0.001
+        best_loss = 1E9
+        epoch = 0
 
-            # print(data_loader.dataset.op_name)
-            # OP-wise
-            for time_, embed_, label_ in data_loader:
-                # Data
-                time_ = time_.clone().detach().float().to(device)
-                embed_ = embed_.clone().detach().float().to(device).unsqueeze(-1)
-                label_ = label_.clone().detach().long().to(device).squeeze()
+        trainset_size = np.sum([d_l.dataset.__len__() for d_l in trainset])
+        validset_size = np.sum([d_l.dataset.__len__() for d_l in validset])
 
-                # Model
-                optimizer.zero_grad()
-                predict_ = surgical_model(embed_, time_)
+        # Iter epochs
+        while (epoch < args.epochs) and (early_stopper_flag == False):
+            print(f"--- Run {run + 1} ---")
+            utils.print_log(
+                "Epoch\t: {}/{}".format(epoch+1, args.epochs),
+                log_txt,
+                display=True
+            )
 
-                # Loss
-                error_batch = criteria(predict_, label_)
-                error_train[epoch] += error_batch
+            print('\nTraining...')
+            surgical_model.train()
+            for i, data_loader in enumerate(trainset):
+                print("\t\tEpoch progress: {:.2f} %".format(
+                    (i+1)/len(trainset)*100), end='\r')
 
-                # Metrics
-                metrics_train.batch(label_, predict_)
+                # OP-wise
+                for time_, embed_, label_ in data_loader:
+                    # Data
+                    time_ = time_.clone().detach().float().to(device)
+                    embed_ = embed_.clone().detach().float().to(device).unsqueeze(-1)
+                    label_ = label_.clone().detach().long().to(device).squeeze()
 
-                # BP
-                error_batch.backward()
-                optimizer.step()
-
-            # Log OP
-            metrics_train.op_end(
-                data_loader.dataset.op_name, plot_ribbon=False)
-
-        # Train Log
-        error_train[epoch] /= trainset_size
-        utils.print_log(
-            f"\tTrain Loss\t: {error_train[epoch].item()}", log_txt, display=True)
-        metrics_train.epoch_end(epoch)
-
-        print('\nValidating...')
-        surgical_model.eval()
-        for i, data_loader in enumerate(validset):
-            print("\t\tEpoch progress: {:.2f} %".format(
-                (i+1)/len(validset)*100), end='\r')
-
-            # OP-wise
-            for time_, embed_, label_ in data_loader:
-                # Data
-                time_ = time_.clone().detach().float().to(device)
-                embed_ = embed_.clone().detach().float().to(device).unsqueeze(-1)
-                label_ = label_.clone().detach().long().to(device).squeeze()
-
-                # Model
-                with torch.no_grad():
+                    # Model
+                    optimizer.zero_grad()
                     predict_ = surgical_model(embed_, time_)
 
-                # Loss
-                error_batch = criteria(predict_, label_)
-                error_valid[epoch] += error_batch
+                    # Loss
+                    error_batch = criteria(predict_, label_)
+                    error_train[epoch] += error_batch
 
-                # Metrics
-                metrics_valid.batch(label_, predict_)
+                    # Metrics
+                    metrics_train.batch(label_, predict_)
 
-            # Log OP
-            metrics_valid.op_end(
-                data_loader.dataset.op_name, plot_ribbon=False)
+                    # BP
+                    error_batch.backward()
+                    optimizer.step()
 
-        # Validation Log
-        error_valid[epoch] /= validset_size
-        utils.print_log(
-            f"\tValidation Loss\t: {error_valid[epoch].item()}", log_txt, display=True)
-        wandb.log(
-            {"error_train": error_train[epoch], "error_valid": error_valid[epoch]})
-        metrics_valid.epoch_end(epoch)
+                # Log OP
+                metrics_train.op_end(
+                    data_loader.dataset.op_name, plot_ribbon=False)
 
-        # Early Stopper
-        if error_valid[epoch] < best_loss:
-            best_loss = error_valid[epoch]
-            patience_escb = 0
-            # torch.save({
-            #    'epoch': epoch + 1,
-            #    'model_state_dict': surgical_model.state_dict(),
-            #    'optimizer_state_dict': optimizer.state_dict(),
-            #    'loss': best_loss,
-            # }, output_path + '/results/checkpoint.ckp')
-        if error_valid[epoch] > best_loss + delta_escb:
-            patience_escb += 1
-        if patience_escb > patience_limit:
-            early_stopper_flag = True
-            utils.print_log('Early Stopper!!!\n', log_txt, display=True)
+            # Train Log
+            error_train[epoch] /= trainset_size
+            avg_train_loss[run, epoch] += error_train[epoch].item()
+            utils.print_log(
+                f"\tTrain Loss\t: {error_train[epoch].item()}", log_txt, display=True)
+            metrics_train.epoch_end(epoch)
 
-        epoch += 1
+            print('\nValidating...')
+            surgical_model.eval()
+            for i, data_loader in enumerate(validset):
+                print("\t\tEpoch progress: {:.2f} %".format(
+                    (i+1)/len(validset)*100), end='\r')
 
-    # Log
-    metrics_train.eval_end('train')
-    metrics_valid.eval_end('validation')
-    utils.plot_error(error_train, error_valid, output_path)
+                # OP-wise
+                for time_, embed_, label_ in data_loader:
+                    # Data
+                    time_ = time_.clone().detach().float().to(device)
+                    embed_ = embed_.clone().detach().float().to(device).unsqueeze(-1)
+                    label_ = label_.clone().detach().long().to(device).squeeze()
 
-    # Log memory usage
+                    # Model
+                    with torch.no_grad():
+                        predict_ = surgical_model(embed_, time_)
+
+                    # Loss
+                    error_batch = criteria(predict_, label_)
+                    error_valid[epoch] += error_batch
+
+                    # Metrics
+                    metrics_valid.batch(label_, predict_)
+
+                # Log OP
+                metrics_valid.op_end(
+                    data_loader.dataset.op_name, plot_ribbon=False)
+
+            # Validation Log
+            error_valid[epoch] /= validset_size
+            avg_valid_loss[run, epoch] += error_valid[epoch].item()
+            utils.print_log(
+                f"\tValidation Loss\t: {error_valid[epoch].item()}", log_txt, display=True)
+            metrics_valid.epoch_end(epoch)
+
+            # Early Stopper
+            if error_valid[epoch] < best_loss:
+                best_loss = error_valid[epoch]
+                patience_escb = 0
+                # torch.save({
+                #    'epoch': epoch + 1,
+                #    'model_state_dict': surgical_model.state_dict(),
+                #    'optimizer_state_dict': optimizer.state_dict(),
+                #    'loss': best_loss,
+                # }, output_path + '/results/checkpoint.ckp')
+            if error_valid[epoch] > best_loss + delta_escb:
+                patience_escb += 1
+            if patience_escb > patience_limit:
+                early_stopper_flag = True
+                utils.print_log('Early Stopper!!!\n', log_txt, display=True)
+
+            epoch += 1
+
+        # Log
+        metrics_train.eval_end('train')
+        metrics_valid.eval_end('validation')
+        utils.plot_error(error_train, error_valid, output_path)
+        avg_accuracy[run, :] = metrics_valid.real_metrics[:, 0]
+        avg_f1[run, :] = metrics_valid.real_metrics[:, 1]
+        avg_jaccard[run, :] = metrics_valid.real_metrics[:, 4]
+
+        # Log memory usage
+        utils.print_log(torch.cuda.memory_summary(device=device), log_txt)
+
+    # Find average values
+    avg_train_loss = utils.average_nonzero(avg_train_loss)
+    avg_valid_loss = utils.average_nonzero(avg_valid_loss)
+    avg_accuracy = utils.average_nonzero(avg_accuracy)
+    avg_f1 = utils.average_nonzero(avg_f1)
+    avg_jaccard = utils.average_nonzero(avg_jaccard)
+
+    # Find last epoch
+    zero_indices = np.where(avg_valid_loss == 0)[0]
+    if zero_indices.size > 0:
+        final_epoch = zero_indices[0]
+    else:
+        final_epoch = epoch
+
+    # Log averaged results to W&B
+    for epoch in range(final_epoch):
+        wandb.log({
+            "epoch": epoch,
+            "avg_train_loss": avg_train_loss[epoch],
+            "avg_valid_loss": avg_valid_loss[epoch],
+            "avg_accuracy": avg_accuracy[epoch],
+            "avg_f1": avg_f1[epoch],
+            "avg_jaccard": avg_jaccard[epoch]
+        })
+    
+    output_path = os.path.dirname(output_path[:-1])+'/'
+    os.mkdir(output_path+'results')
+    utils.plot_error(avg_train_loss, avg_valid_loss, output_path)
     utils.print_log(torch.cuda.memory_summary(device=device), log_txt)

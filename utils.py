@@ -1,17 +1,13 @@
 import os
 import yaml
-import math
 import time
 import torch
-import random
 import shutil
 import matplotlib
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
 
 from datetime import datetime
-from scipy.stats import entropy
 
 
 plt.rcParams["font.family"] = "Times New Roman"
@@ -59,14 +55,16 @@ def print_log(text, file_name='log.txt',
         print(text, end=ends_with, file=text_file)
 
 
-def init_log(args):
+def init_log(args, run):
     """
     Creates an unique output folder with given tag,
     inits log.txt, results/ and backups .py files in code/
     """
     # output folders
     start_time = datetime.now()
-    output_dir = f"logs/{args.training_tag}/{start_time.strftime('%Y-%m-%d_%H-%M-%S')}/"
+    output_dir = (f"logs/{args.training_tag}_nops{args.num_ops}_"
+                  f"bs{args.batch_size}_mdrop{args.model_dropout}_sdrop{args.sentence_dropout}_"
+                  f"lr{args.learning_rate}_wd{args.weight_decay}_mdim{args.model_dim}/{str(run+1)}/")
     os.makedirs(output_dir+"code/")
     os.makedirs(output_dir+"results/")
     os.makedirs(output_dir+"results/ribbons/")
@@ -147,6 +145,15 @@ def listdir(path, ending=None):
                        if f.endswith(ending)])
 
 
+def average_nonzero(arr):
+    total = np.sum(arr, axis=0)
+    avg = np.zeros_like(total, dtype=float)
+    count_non_zero = np.count_nonzero(arr, axis=0)
+    avg[count_non_zero != 0] = total[count_non_zero != 0] / \
+        count_non_zero[count_non_zero != 0]
+    return avg
+
+
 def save_args(args, filename):
     # Convert the argparse Namespace to a dictionary
     params = vars(args)
@@ -157,10 +164,11 @@ def save_args(args, filename):
 
 
 def data_split(data_path, log_txt, num_train_ops):
-    
+
     trainset = listdir(data_path['train'])
     if num_train_ops != -1:
-        assert num_train_ops <= len(trainset), f'Trainset has {len(trainset)}-OPs, {num_train_ops} asked' 
+        assert num_train_ops <= len(
+            trainset), f'Trainset has {len(trainset)}-OPs, {num_train_ops} asked'
         trainset = trainset[:num_train_ops]
 
     validset = listdir(data_path['valid'])
@@ -178,8 +186,12 @@ def data_split(data_path, log_txt, num_train_ops):
 
 
 def plot_error(error_train, error_valid, output_path):
-    error_train = remove_tailzeros(error_train.cpu().detach().numpy())
-    error_valid = remove_tailzeros(error_valid.cpu().detach().numpy())
+    if isinstance(error_train, np.ndarray):
+        error_train = remove_tailzeros(error_train)
+        error_valid = remove_tailzeros(error_valid)
+    else:
+        error_train = remove_tailzeros(error_train.cpu().detach().numpy())
+        error_valid = remove_tailzeros(error_valid.cpu().detach().numpy())
 
     plt.rcParams['font.family'] = 'Times New Roman'
     plt.rcParams['font.size'] = 18

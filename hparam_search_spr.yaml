@@ -2,17 +2,29 @@ program: spr.py
 method: random
 metric:
   goal: minimize
-  name: error_valid
+  name: avg_valid_loss
 parameters:
   project_name:
     value: 'SPR'
   training_tag:
-    value: 'hparam_tuning_syn10_openai_transformer'
+    value: 'synops-wmf'
+  trainset_path:
+    value: 'Dataset/Train_SynPoCaP_WMF'
+  validset_path:
+    value: 'Dataset/Validation_PoCaP'
+  testset_path:
+    value: 'Dataset/Test'
   epochs:
-    value: 500
+    value: 1000
+  num_ops:
+    value: 20
+  repeat_run:
+    value: 5
   batch_size:
-    values: [64, 128, 256]
-  dropout_prob:
+    values: [32, 64, 128, 256]
+  model_dropout:
+    values: [0, 0.1, 0.15, 0.2, 0.5]
+  sentence_dropout:
     values: [0, 0.1, 0.15, 0.2, 0.5]
   learning_rate:
     values: [1e-6, 5e-6, 1e-5, 5e-5]
@@ -20,8 +32,4 @@ parameters:
     values: [1e-7, 5e-7, 1e-6, 5e-6]
   model_dim:
     values: [128, 256, 512, 1024]
-  num_head:
-    values: [2, 3, 4, 5, 7]
-  num_enc:
-    values: [1, 2, 3, 4]
-run_cap: 15
+run_cap: 25
