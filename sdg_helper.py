@@ -216,9 +216,9 @@ def check_format(block, columns, generation_tag='*Ausfüllen*'):
 
 
 def phase_count_limits(dataset):
-    tolerence_percentage = 0.4
+    min_lower_limit = 2
     min_upper_limit = 10
-    min_phase_length = 2
+    tolerence_percentage = 0.4
     phase_count = np.zeros((len(dataset), 8), dtype=int)
 
     for i, d in enumerate(dataset):
@@ -235,7 +235,7 @@ def phase_count_limits(dataset):
     lower_limit -= (lower_limit * tolerence_percentage).astype(int)
     upper_limit += (upper_limit * tolerence_percentage).astype(int)
 
-    lower_limit[lower_limit == 0] = min_phase_length
+    lower_limit[lower_limit == 0] = min_lower_limit
     upper_limit[upper_limit < min_upper_limit] = min_upper_limit
 
     return lower_limit, upper_limit, phase_count

@@ -96,9 +96,11 @@ Die chirurgischen Schritte der laufenden Phase sind: {self.get_step_description(
 
         if step_label != 'Alltäglich':
             prompt += f"""
-* reale Daten: Im Folgenden findest du ein Beispiel für reale Gespräche, die ein Radiologe in der laufenden Phase geführt hat:
-<reale Daten>
-{sdg_helper.sample_real_phase(step_label)}</reale Daten>
+* reale Daten: Im Folgenden findest du zwei Beispiele für reale Gespräche, die Radiologen in der laufenden Phase geführt haben:
+<reale Daten 1>
+{sdg_helper.sample_real_phase(step_label)}</reale Daten 1>
+<reale Daten 2>
+{sdg_helper.sample_real_phase(step_label)}</reale Daten 2>
 
 * Satzgruppen: Häufig verwendete Ausdrücke der Radiologen bei realen Operationen wurden extrahiert und ähnliche Sätze der gleichen Phasen wurden gruppiert. Für die laufende Phase sind unten <{num2words(n_examples, lang='de')}> Beispielsätze mit Erklärungen angegeben:
     {sdg_helper.sample_pocap_example(phase=answer_df['Phase'].iloc[0], n_examples=n_examples)}
@@ -112,15 +114,16 @@ Die chirurgischen Schritte der laufenden Phase sind: {self.get_step_description(
 * Strategie: Zunächst fasst du deine Aufgabe in dem Abschnitt <Zusammenfassung> zusammen. Danach fahre mit der Generierung von Sätzen fort. Während du Sätze bildest: 1) Lies reale Gespräche im <reale Daten>-Abschnitt sorgfältig durch und verstehe, wie die Radiologen kommunizieren. 2) Lies frühere Gespräche, die im Punkt 'Kontext' unten gegeben sind, und analysiere, inwieweit Fortschritte bei diesem Thema gemacht worden sind. Nutze dafür die Informationen im Punkt „Überblick“ unten. 3) Plane das Tempo des Fortschritts und der dazugehörenden Gespräche entsprechend. Erzähle nicht alles zu Beginn der Phase/Schritt und wiederhole es viele Male. Plane sorgfältig und verteile die notwendigen Aktivitäten auf vorgegebene leere Gesprächsfelder. 4) Generiere Säzte. Verwende dein Verständnis und die Analyse der vorherigen drei Punkte bei der Satzbildung.
 
 * Sprache [SEHR WICHTIG!]:
-    - Erzeuge natürliche Gespräche mit dem Patienten und dem Assistenten, und beantworte ihre Fragen oder Kommentare. 
+    - Erzeuge natürliche Gespräche mit dem Patienten und dem Assistenten, und BEANTWORTE IHRE FRAGEN ODER KOMMENTARE.
+    - MACHE GRAMMATIKALISCHE FEHLER. Echte Gespräche sind nicht streng strukturiert. Beobachte echte Daten und bilde ähnlich fehlerhafte, aber natürliche Sätze. 
     - Achte darauf, dass der Übergang zwischen den Phasen und Schritten natürlich erfolgt.
     - Halte deine Sätze in angemessener Länge. SCHREIBE IN JEDER TEXTFELD DURCHSCHNITTLICH <{num2words(7, lang='de').upper()}-{num2words(8, lang='de').upper()} WÖRTER>.
     - Um sicherzustellen, dass die generierten Sätze medizinisch korrekt sind, verwende die in den Spalten 'Schritt' und 'Phase' angegebenen Informationen und generiere korrekte Gespräche.
-    - Fokus liegt auf präzisen medizinischen Anweisungen. Spreche präzise und direkt.
-    - Bewahre in deinen Gesprächen einen neutralen Ton, spreche nicht übermäßig positiv oder negativ.
+    - FOKUS LIEGT AUF PRÄZISEN MEDIZINISCHEN ANWEISUNGEN. Spreche präzise und direkt.
+    - Bewahre in deinen Gesprächen möglichst einen NEUTRALEN TON, spreche nicht positiv oder negativ.
     - Wenn in der Spalte 'Schritt' 'Alltäglich' steht, führe ein alltägliches Gespräch. Fahre immer mit dem letzten Gesprächspunkt fort.
     - Betrachte auch die angegebenen Satzgruppen, um sich inspirieren zu lassen. 
-    - Impliziere deine Handlungen manchmal, anstatt sie ausdrücklich zu sagen.
+    - IMPLIZIERE DEINE HANDLUNGEN MANCHMAL, anstatt sie immer ausdrücklich zu benennen.
     - Vermeide unnötige Floskeln.
     - Verwende keine Emojis.
 
