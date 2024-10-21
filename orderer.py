@@ -32,6 +32,7 @@ def individual_conversations(df_path: str, person: str):
     df = pd.read_csv(df_path+'.csv', index_col=0)
     df = df.loc[df['Person'] == person]
     df = df.drop(columns=['Person'])
+    df = df.reset_index(drop=True)
     df.to_csv(df_path+'.csv')
 
 

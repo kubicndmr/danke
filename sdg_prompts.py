@@ -96,14 +96,25 @@ Die chirurgischen Schritte der laufenden Phase sind: {self.get_step_description(
 
         if step_label != 'Alltäglich':
             prompt += f"""
-* reale Daten: Im Folgenden findest du zwei Beispiele für reale Gespräche, die Radiologen in der laufenden Phase geführt haben:
-<reale Daten 1>
-{sdg_helper.sample_real_phase(step_label)}</reale Daten 1>
-<reale Daten 2>
-{sdg_helper.sample_real_phase(step_label)}</reale Daten 2>
+* reale Daten: Im Folgenden findest du ein Beispiele für reale Gespräche, die der Radiologe in der laufenden Phase geführt haben:
+<reale Daten>
+{sdg_helper.sample_real_phase(step_label)}</reale Daten>
 
 * Satzgruppen: Häufig verwendete Ausdrücke der Radiologen bei realen Operationen wurden extrahiert und ähnliche Sätze der gleichen Phasen wurden gruppiert. Für die laufende Phase sind unten <{num2words(n_examples, lang='de')}> Beispielsätze mit Erklärungen angegeben:
     {sdg_helper.sample_pocap_example(phase=answer_df['Phase'].iloc[0], n_examples=n_examples)}
+
+* n-Gramme: Analysiere die am häufigsten verwendeten n-Gramme, und die Anzahl der durchschnittliche Verwendungen pro Operation im Datenbank. Verwende diese n-Gramme in deine Antworten, um natürlicher und gesprächiger zu klingen und echte menschliche Sprachmuster zu imitieren. Konzentrieren Sie sich darauf, diese Phrasen nahtlos in deine Antworten einzubauen und dabei Klarheit und Kohärenz zu wahren. Achte darauf, dass du die n-Gramme an den Kontext des Gesprächs anpassen. Hier ist der zu analysierende Text:
+    Häufigste Wörter:
+        <ja>:32.9 |  <mal>:17.0 |  <bitte>:13.5 |  <bisschen>:12.6 |  <gut>:10.9 |  <nochmal>:10.4 |  <schon>:10.1 |  <genau>:9.4 |  <ganz>:8.8 |  <ne>:7.4 |  <okay>:7.0 |  <einatmen>:6.7 |  <tief>:6.5 |  <einfach>:5.9 |  <*PatientName*>:5.7 |  <atmen>:5.1 |  <kannst>:5.0 |  <gleich>:5.0 |  <immer>:4.4 |  <kurz>:4.4 | 
+
+    Häufigste Bigrams:
+        <tief einatmen>:3.9 |  <luft anhalten>:3.6 |  <ganz tief>:2.9 |  <ja ja>:2.5 |  <einatmen luft>:1.8 |  <röhre bitte>:1.3 |  <tut weh>:1.2 |  <schon mal>:1.2 |  <einatmen ausatmen>:1.1 |  <frau *PatientName*>:1.1 |  <nochmal einatmen>:1.1 |  <herr *PatientName*>:1.1 |  <lokale betäubung>:1.1 |  <mal kurz>:1.1 |  <ja genau>:1.0 |  <ja gut>:0.9 |  <ja okay>:0.9 |  <tief ausatmen>:0.8 |  <nochmal pressen>:0.8 |  <mal bisschen>:0.8 | 
+
+    Häufigste Trigrams:
+        <einatmen luft anhalten>:1.6 |  <ganz tief einatmen>:1.6 |  <tief einatmen luft>:1.5 |  <ganz tief ausatmen>:0.6 |  <luft anhalten atmen>:0.6 |  <nochmal einatmen ausatmen>:0.5 |  <nochmal tief einatmen>:0.5 |  <bitte ganz tief>:0.4 |  <mal tief einatmen>:0.4 |  <acht zehn tagen>:0.4 |  <bitte tief einatmen>:0.4 |  <ausatmen luft anhalten>:0.3 |  <ja ja ja>:0.3 |  <nochmal ganz tief>:0.3 |  <einatmen ausatmen nochmal>:0.3 |  <einatmen ausatmen luft>:0.3 |  <mal ganz tief>:0.2 |  <einathmen luft anhalten>:0.2 |  <ganz normal atmen>:0.2 |  <tief einathmen luft>:0.2 | 
+
+    Häufigste Viergrams:
+        <tief einatmen luft anhalten>:1.4 |  <ganz tief einatmen luft>:0.6 |  <einatmen luft anhalten atmen>:0.3 |  <bitte ganz tief einatmen>:0.3 |  <einatmen ausatmen luft anhalten>:0.2 |  <tief einathmen luft anhalten>:0.2 |  <nochmal einatmen ausatmen nochmal>:0.2 |  <nochmal tief einatmen luft>:0.2 |  <mal ganz tief einatmen>:0.2 |  <nochmal einatmen ausatmen luft>:0.1 |  <mal tief einatmen luft>:0.1 |  <luft anhalten atmen bewegen>:0.1 |  <nochmal ganz tief einatmen>:0.1 |  <ganz tief einathmen luft>:0.1 |  <bitte tief einatmen luft>:0.1 |  <bitte mal tief einatmen>:0.1 |  <einatmen ausatmen nochmal kräftig>:0.1 |  <drückt brennt bisschen haut>:0.1 |  <herr *PatientName* luft anhalten>:0.1 |  <bekommen gleich nochmal atemkommando>:0.1
 """
 
         prompt += """
@@ -122,8 +133,9 @@ Die chirurgischen Schritte der laufenden Phase sind: {self.get_step_description(
     - FOKUS LIEGT AUF PRÄZISEN MEDIZINISCHEN ANWEISUNGEN. Spreche präzise und direkt.
     - Bewahre in deinen Gesprächen möglichst einen NEUTRALEN TON, spreche nicht positiv oder negativ.
     - Wenn in der Spalte 'Schritt' 'Alltäglich' steht, führe ein alltägliches Gespräch. Fahre immer mit dem letzten Gesprächspunkt fort.
-    - Betrachte auch die angegebenen Satzgruppen, um sich inspirieren zu lassen. 
+    - Betrachte auch die angegebenen SATZGRUPPEN UND N-GRAMME, ECHTE MENSCHLICHE SPRACHMUSTER ZU IMITIEREN.
     - IMPLIZIERE DEINE HANDLUNGEN MANCHMAL, anstatt sie immer ausdrücklich zu benennen.
+    - Verwende manchmal typische deutsche Füllwörter, um natürlicher zu klingen.
     - Vermeide unnötige Floskeln.
     - Verwende keine Emojis.
 
@@ -143,10 +155,10 @@ Die chirurgischen Schritte der laufenden Phase sind: {self.get_step_description(
         prompt += f"""
 <Zusammenfassung>
 Schreib hier
-    1. Fasse den Sprachstil des Radiologen zusammen, den du simulieren wirst.
+    1. Fasse die Persona des Radiologen zusammen, den du simulieren wirst.
     2. Was sind die chirurgische Schritte im angegebenen Datenbereich, die durchgeführt werden sollen?
-    3. Was sind die vier Punkte deiner Strategie bei der Satzbildung?
-    4. Was ist die durchschnittliche Länge der Sätze, die du generieren wirst?
+    3. Was ist die durchschnittliche Länge der Sätze, die du generieren wirst?
+    4. Was sind die Sprachanweisungen, die als SEHR WICHTIG markiert sind und du folgen musst?
 </Zusammenfassung>
 """
         if iteration:
