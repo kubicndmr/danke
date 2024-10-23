@@ -92,7 +92,8 @@ Das Ziel ist es, realistische, hochwertige, einzigartige, und medizinisch korrek
     - Phase 6 Katheterkontrolle: Die Position des Katheters wird mittels Bildgebung kontrolliert, um eine korrekte Platzierung zu gewährleisten.
     - Phase 7 Abschluss: Die Wunde wird geschlossen, und der Eingriff wird abgeschlossen. Der Patient wird aus dem sterilen Bereich entlassen.
 
-Die chirurgischen Schritte der laufenden Phase sind: {self.get_step_description(step_label)}"""
+Die chirurgischen Schritte der laufenden Phase sind: {self.get_step_description(step_label)}
+"""
 
         if step_label != 'Alltäglich':
             prompt += f"""
@@ -103,18 +104,26 @@ Die chirurgischen Schritte der laufenden Phase sind: {self.get_step_description(
 * Satzgruppen: Häufig verwendete Ausdrücke der Radiologen bei realen Operationen wurden extrahiert und ähnliche Sätze der gleichen Phasen wurden gruppiert. Für die laufende Phase sind unten <{num2words(n_examples, lang='de')}> Beispielsätze mit Erklärungen angegeben:
     {sdg_helper.sample_pocap_example(phase=answer_df['Phase'].iloc[0], n_examples=n_examples)}
 
-* n-Gramme: Analysiere die am häufigsten verwendeten n-Gramme, und die Anzahl der durchschnittliche Verwendungen pro Operation im Datenbank. Verwende diese n-Gramme in deine Antworten, um natürlicher und gesprächiger zu klingen und echte menschliche Sprachmuster zu imitieren. Konzentrieren Sie sich darauf, diese Phrasen nahtlos in deine Antworten einzubauen und dabei Klarheit und Kohärenz zu wahren. Achte darauf, dass du die n-Gramme an den Kontext des Gesprächs anpassen. Hier ist der zu analysierende Text:
-    Häufigste Wörter:
-        <ja>:32.9 |  <mal>:17.0 |  <bitte>:13.5 |  <bisschen>:12.6 |  <gut>:10.9 |  <nochmal>:10.4 |  <schon>:10.1 |  <genau>:9.4 |  <ganz>:8.8 |  <ne>:7.4 |  <okay>:7.0 |  <einatmen>:6.7 |  <tief>:6.5 |  <einfach>:5.9 |  <*PatientName*>:5.7 |  <atmen>:5.1 |  <kannst>:5.0 |  <gleich>:5.0 |  <immer>:4.4 |  <kurz>:4.4 | 
+* Röntgenbildgebung: Wenn die Textspalte mit '*Atemkommando*' markiert ist, weise den Patienten an, seine Atmung während der Röntgenaufnahme zu kontrollieren. Beispielsätze, die du ähnliche Ausdrücke verwendest kann, sind folgendes: 
+    -tief einatmen luft anhalten -ganz tief einatmen luft -einatmen luft anhalten atmen -bitte ganz tief einatmen -einatmen ausatmen luft anhalten -tief einathmen luft anhalten -nochmal einatmen ausatmen nochmal -nochmal tief einatmen luft -mal ganz tief einatmen -nochmal einatmen ausatmen luft -mal tief einatmen luft -luft anhalten atmen bewegen -nochmal ganz tief einatmen -ganz tief einathmen luft -bitte tief einatmen luft -bitte mal tief einatmen -einatmen ausatmen nochmal kräftig -drückt brennt bisschen haut -herr *PatientName* luft anhalten -bekommen gleich nochmal atemkommando>
 
-    Häufigste Bigrams:
-        <tief einatmen>:3.9 |  <luft anhalten>:3.6 |  <ganz tief>:2.9 |  <ja ja>:2.5 |  <einatmen luft>:1.8 |  <röhre bitte>:1.3 |  <tut weh>:1.2 |  <schon mal>:1.2 |  <einatmen ausatmen>:1.1 |  <frau *PatientName*>:1.1 |  <nochmal einatmen>:1.1 |  <herr *PatientName*>:1.1 |  <lokale betäubung>:1.1 |  <mal kurz>:1.1 |  <ja genau>:1.0 |  <ja gut>:0.9 |  <ja okay>:0.9 |  <tief ausatmen>:0.8 |  <nochmal pressen>:0.8 |  <mal bisschen>:0.8 | 
-
-    Häufigste Trigrams:
-        <einatmen luft anhalten>:1.6 |  <ganz tief einatmen>:1.6 |  <tief einatmen luft>:1.5 |  <ganz tief ausatmen>:0.6 |  <luft anhalten atmen>:0.6 |  <nochmal einatmen ausatmen>:0.5 |  <nochmal tief einatmen>:0.5 |  <bitte ganz tief>:0.4 |  <mal tief einatmen>:0.4 |  <acht zehn tagen>:0.4 |  <bitte tief einatmen>:0.4 |  <ausatmen luft anhalten>:0.3 |  <ja ja ja>:0.3 |  <nochmal ganz tief>:0.3 |  <einatmen ausatmen nochmal>:0.3 |  <einatmen ausatmen luft>:0.3 |  <mal ganz tief>:0.2 |  <einathmen luft anhalten>:0.2 |  <ganz normal atmen>:0.2 |  <tief einathmen luft>:0.2 | 
-
-    Häufigste Viergrams:
-        <tief einatmen luft anhalten>:1.4 |  <ganz tief einatmen luft>:0.6 |  <einatmen luft anhalten atmen>:0.3 |  <bitte ganz tief einatmen>:0.3 |  <einatmen ausatmen luft anhalten>:0.2 |  <tief einathmen luft anhalten>:0.2 |  <nochmal einatmen ausatmen nochmal>:0.2 |  <nochmal tief einatmen luft>:0.2 |  <mal ganz tief einatmen>:0.2 |  <nochmal einatmen ausatmen luft>:0.1 |  <mal tief einatmen luft>:0.1 |  <luft anhalten atmen bewegen>:0.1 |  <nochmal ganz tief einatmen>:0.1 |  <ganz tief einathmen luft>:0.1 |  <bitte tief einatmen luft>:0.1 |  <bitte mal tief einatmen>:0.1 |  <einatmen ausatmen nochmal kräftig>:0.1 |  <drückt brennt bisschen haut>:0.1 |  <herr *PatientName* luft anhalten>:0.1 |  <bekommen gleich nochmal atemkommando>:0.1
+* Fachwörter: Radiologen verwenden häufig die folgenden Fachbegriffe. Verwende ähnliche Fachbegriffe, wenn sie die laufende Tätigkeit und das Gespräch weitergeben. Die technischen Begriffe und ihre Bedeutungen sind wie folgt:
+    - Kranial: in Richtung Kopf
+    - Terumo, Terumonadel: präzise Injektionsnadel
+    - Glomeruläre Filtrationsrate: Nieren-Blutfiltration pro Minute.
+    - Decoderm: Creme zur Verhinderung von Infektionen
+    - Omnistripes, Steri-Streifen: Wundverschlussstreifen
+    - KM, Kontrastmittel: Substanz zur Bildgebung-Verstärkung
+    - BV, Bildverstärkung: Verbesserung schwacher Bildsignale
+    - DSA, DSA-Serie: Digitale Substraktionsangiographie
+    - In-Stent-Stenose: Implantat zum Offenhalten von Arterien/Venen
+    - Tamponade: Auffüllung von natürlich oder künstlichen Hohlräumen
+    - Dialator: Werkzeug zum Erweitern einer Körperöffnung
+    - Mecain, Mepivacain: Arzneimittel zur örtlichen Betäubung
+    - Imeron: Kontrastmittel
+    - Tegaderm: Durchsichtiger, selbstklebender Wundverband
+    - Kavikula: Venenkanüle für intravenöse Zugänge
+    - Vicryl: Resorbierbares chirurgisches Nahtmaterial
 """
 
         prompt += """
@@ -124,16 +133,17 @@ Die chirurgischen Schritte der laufenden Phase sind: {self.get_step_description(
 
 * Strategie: Zunächst fasst du deine Aufgabe in dem Abschnitt <Zusammenfassung> zusammen. Danach fahre mit der Generierung von Sätzen fort. Während du Sätze bildest: 1) Lies reale Gespräche im <reale Daten>-Abschnitt sorgfältig durch und verstehe, wie die Radiologen kommunizieren. 2) Lies frühere Gespräche, die im Punkt 'Kontext' unten gegeben sind, und analysiere, inwieweit Fortschritte bei diesem Thema gemacht worden sind. Nutze dafür die Informationen im Punkt „Überblick“ unten. 3) Plane das Tempo des Fortschritts und der dazugehörenden Gespräche entsprechend. Erzähle nicht alles zu Beginn der Phase/Schritt und wiederhole es viele Male. Plane sorgfältig und verteile die notwendigen Aktivitäten auf vorgegebene leere Gesprächsfelder. 4) Generiere Säzte. Verwende dein Verständnis und die Analyse der vorherigen drei Punkte bei der Satzbildung.
 
+* Nörtralität: Bewahre in deinen Gesprächen möglichst einen neutralen ton. Erstelle eine gleichmäßige Anzahl von positiven und negativen Sätzen. Jeder positive Satz sollte durch einen ebenso negativen Satz ausgeglichen werden. Verwende neutrale Sprache, wo es möglich ist, aber achte darauf, dass die Anzahl positiver und negativer Sätze gleich bleibt.
+
 * Sprache [SEHR WICHTIG!]:
     - Erzeuge natürliche Gespräche mit dem Patienten und dem Assistenten, und BEANTWORTE IHRE FRAGEN ODER KOMMENTARE.
     - MACHE GRAMMATIKALISCHE FEHLER. Echte Gespräche sind nicht streng strukturiert. Beobachte echte Daten und bilde ähnlich fehlerhafte, aber natürliche Sätze. 
     - Achte darauf, dass der Übergang zwischen den Phasen und Schritten natürlich erfolgt.
-    - Halte deine Sätze in angemessener Länge. SCHREIBE IN JEDER TEXTFELD DURCHSCHNITTLICH <{num2words(7, lang='de').upper()}-{num2words(8, lang='de').upper()} WÖRTER>.
+    - Halte deine Sätze in angemessener Länge. SCHREIBE IN JEDER TEXTFELD DURCHSCHNITTLICH <SIEBEN - ACHT WÖRTER>.
     - Um sicherzustellen, dass die generierten Sätze medizinisch korrekt sind, verwende die in den Spalten 'Schritt' und 'Phase' angegebenen Informationen und generiere korrekte Gespräche.
     - FOKUS LIEGT AUF PRÄZISEN MEDIZINISCHEN ANWEISUNGEN. Spreche präzise und direkt.
-    - Bewahre in deinen Gesprächen möglichst einen NEUTRALEN TON, spreche nicht positiv oder negativ.
     - Wenn in der Spalte 'Schritt' 'Alltäglich' steht, führe ein alltägliches Gespräch. Fahre immer mit dem letzten Gesprächspunkt fort.
-    - Betrachte auch die angegebenen SATZGRUPPEN UND N-GRAMME, ECHTE MENSCHLICHE SPRACHMUSTER ZU IMITIEREN.
+    - Betrachte die angegebenen SATZGRUPPEN UND N-GRAMME, ECHTE MENSCHLICHE SPRACHMUSTER ZU IMITIEREN.
     - IMPLIZIERE DEINE HANDLUNGEN MANCHMAL, anstatt sie immer ausdrücklich zu benennen.
     - Verwende manchmal typische deutsche Füllwörter, um natürlicher zu klingen.
     - Vermeide unnötige Floskeln.
@@ -144,7 +154,7 @@ Die chirurgischen Schritte der laufenden Phase sind: {self.get_step_description(
         if iteration:
             sentence_idx = step_df[(step_df['Schritt'] == step_label) &
                                    (step_df['Person'] == 'Radiologe')].shape[0]
-            prompt += "\n* Kontext: Personen in der Spalte „Person“, die miteinander sprechen, berücksichtige bei der Erstellung neuer Sätze frühere Unterhaltungen. Bisherige Gespräche:\n"
+            prompt += "\n* Kontext: Du ahmst die Persona der angegebenen Person in der Spalte 'Person' nach, wenn du Sätze erzeugst. Personen in der Spalte „Person“, die miteinander sprechen, berücksichtige bei der Erstellung neuer Sätze frühere Unterhaltungen. Bisherige Gespräche:\n"
             prompt += f"\n<Daten>\n{step_df.tail(n_context).to_csv(index=True, sep=';', index_label='Index')}</Daten>\n"
             if step_label != 'Alltäglich':
                 prompt += f"\t * Überblick: Du wirst in mehreren Teilen der laufenden Operation über <{step_label}> insgesamt <{num2words(step_count, lang='de')}> Mal sprechen. Bisher <{num2words(sentence_idx+1, lang='de')}> Mal wurden gesprochen. Plane den weiteren Verlauf der Operation entsprechend. Im Abschnitt <Antwort> wirst du die gegebene Zeile erzeugen.\n"
@@ -157,8 +167,9 @@ Die chirurgischen Schritte der laufenden Phase sind: {self.get_step_description(
 Schreib hier
     1. Fasse die Persona des Radiologen zusammen, den du simulieren wirst.
     2. Was sind die chirurgische Schritte im angegebenen Datenbereich, die durchgeführt werden sollen?
-    3. Was ist die durchschnittliche Länge der Sätze, die du generieren wirst?
-    4. Was sind die Sprachanweisungen, die als SEHR WICHTIG markiert sind und du folgen musst?
+    3. Welche Fachwörter passen zu den laufenden Schritten?
+    4. Was ist die durchschnittliche Länge der Sätze, die du generieren wirst?
+    5. Was sind die Sprachanweisungen, die als SEHR WICHTIG markiert sind und du folgen musst?
 </Zusammenfassung>
 """
         if iteration:

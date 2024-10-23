@@ -145,15 +145,6 @@ def listdir(path, ending=None):
                        if f.endswith(ending)])
 
 
-def average_nonzero(arr):
-    total = np.sum(arr, axis=0)
-    avg = np.zeros_like(total, dtype=float)
-    count_non_zero = np.count_nonzero(arr, axis=0)
-    avg[count_non_zero != 0] = total[count_non_zero != 0] / \
-        count_non_zero[count_non_zero != 0]
-    return avg
-
-
 def save_args(args, filename):
     # Convert the argparse Namespace to a dictionary
     params = vars(args)
@@ -197,8 +188,18 @@ def plot_error(error_train, error_valid, output_path):
     plt.rcParams['font.size'] = 18
 
     plt.figure(dpi=FIG_DPI, constrained_layout=True)
-    plt.plot(error_train, color='#084c61', linewidth=2, label='Train')
-    plt.plot(error_valid, color='#a6382e', linewidth=2, label='Valid')
+    if error_train.ndim == 1:
+        plt.plot(error_train, color='#084c61', linewidth=2, label='Train')
+        plt.plot(error_valid, color='#a6382e', linewidth=2, label='Valid')
+    else:
+        error_train[error_train == 0] = np.nan
+        error_valid[error_valid == 0] = np.nan
+        for i in range(error_train.shape[1]):
+            plt.plot(error_train[:, i], color='#084c61', linewidth=2)
+            plt.plot(error_valid[:, i], color='#a6382e', linewidth=2)
+        plt.plot([], [], color='#084c61', linewidth=2, label='Train')
+        plt.plot([], [], color='#a6382e', linewidth=2, label='Valid')
+
     plt.xlabel('Epochs', fontsize=16)
     plt.ylabel('MSE', fontsize=16)
     plt.legend(loc="upper right", fontsize=12)

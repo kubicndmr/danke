@@ -40,6 +40,9 @@ surgical_steps = {
     7: ['Steriles Pflaster auflegen', 'Tisch fährt nach unten']
 }
 
+breath_list = ['Durchleuchtung im Bereich der Subklavia', 'Durchleuchtung im Bereich der Vena cava inferior (VCI)', 'Durchleuchtung des VCI-Bereichs', 
+               'Kürzen des Katheters', 'Digitale Subtraktionsangiographie des Brust']
+
 # Functions
 
 
@@ -302,6 +305,8 @@ def sample_time_stamps(phase_lengths):
 def sample_daily_percentage():  # values precomputed
     return 0.28 + np.random.uniform(-0.07, 0.07)
 
+def sample_breath_percentage():
+    return 0.09 + np.random.uniform(-0.08, 0.08)
 
 def sample_daily_topic():
     return topics.loc[np.random.randint(1, len(topics)), 'Thema']
@@ -364,6 +369,7 @@ def draft_OP():
     patient_percentage = random.choice([0.1, 0.125, 0.15, 0.175])
     assistant_percentage = random.choice([0.1, 0.125, 0.15, 0.175])
     phase_lengths, phase_length_scale = sample_phase_lengths()
+    breath_percentage = sample_breath_percentage()
     daily_percentage = sample_daily_percentage()
     time_stamps = sample_time_stamps(phase_lengths)
 
@@ -406,6 +412,12 @@ def draft_OP():
                                       size=int(len(df)*daily_percentage), replace=False)
     df.loc[random_indices, 'Schritt'] = 'Alltäglich'
 
+    # Add breathing command
+    breath_df = df[df['Schritt'].isin(breath_list)]
+    num_rows_to_breath = int(len(breath_df) * breath_percentage)
+    rows_to_replace = breath_df.sample(n=num_rows_to_breath).index
+    df.loc[rows_to_replace, 'Text'] = '*Atemkommando*'
+    
     # Add talking person
     df['Person'] = 'Radiologe'
 

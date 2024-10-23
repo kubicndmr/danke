@@ -65,7 +65,7 @@ if __name__ == '__main__':
                         help='path to test set')
 
     args = parser.parse_args()
-        
+
     # wandb init
     wandb.init()
     wandb.config.update(args)
@@ -74,11 +74,11 @@ if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # Average results over runs
-    avg_train_loss = np.zeros((args.repeat_run, args.epochs))
-    avg_valid_loss = np.zeros((args.repeat_run, args.epochs))
-    avg_accuracy = np.zeros((args.repeat_run, args.epochs))
-    avg_f1 = np.zeros((args.repeat_run, args.epochs))
-    avg_jaccard = np.zeros((args.repeat_run, args.epochs))
+    train_loss_container = np.zeros((args.repeat_run, args.epochs))
+    valid_loss_container = np.zeros((args.repeat_run, args.epochs))
+    accuracy_container = np.zeros((args.repeat_run, args.epochs))
+    f1_container = np.zeros((args.repeat_run, args.epochs))
+    jaccard_container = np.zeros((args.repeat_run, args.epochs))
 
     for run in range(args.repeat_run):
         # Init output folder
@@ -181,7 +181,7 @@ if __name__ == '__main__':
 
             # Train Log
             error_train[epoch] /= trainset_size
-            avg_train_loss[run, epoch] += error_train[epoch].item()
+            train_loss_container[run, epoch] += error_train[epoch].item()
             utils.print_log(
                 f"\tTrain Loss\t: {error_train[epoch].item()}", log_txt, display=True)
             metrics_train.epoch_end(epoch)
@@ -216,7 +216,7 @@ if __name__ == '__main__':
 
             # Validation Log
             error_valid[epoch] /= validset_size
-            avg_valid_loss[run, epoch] += error_valid[epoch].item()
+            valid_loss_container[run, epoch] += error_valid[epoch].item()
             utils.print_log(
                 f"\tValidation Loss\t: {error_valid[epoch].item()}", log_txt, display=True)
             metrics_valid.epoch_end(epoch)
@@ -243,39 +243,48 @@ if __name__ == '__main__':
         metrics_train.eval_end('train')
         metrics_valid.eval_end('validation')
         utils.plot_error(error_train, error_valid, output_path)
-        avg_accuracy[run, :] = metrics_valid.real_metrics[:, 0]
-        avg_f1[run, :] = metrics_valid.real_metrics[:, 1]
-        avg_jaccard[run, :] = metrics_valid.real_metrics[:, 4]
+        accuracy_container[run, :] = metrics_valid.real_metrics[:, 0]
+        f1_container[run, :] = metrics_valid.real_metrics[:, 1]
+        jaccard_container[run, :] = metrics_valid.real_metrics[:, 4]
 
         # Log memory usage
         utils.print_log(torch.cuda.memory_summary(device=device), log_txt)
 
-    # Find average values
-    avg_train_loss = utils.average_nonzero(avg_train_loss)
-    avg_valid_loss = utils.average_nonzero(avg_valid_loss)
-    avg_accuracy = utils.average_nonzero(avg_accuracy)
-    avg_f1 = utils.average_nonzero(avg_f1)
-    avg_jaccard = utils.average_nonzero(avg_jaccard)
-
-    # Find last epoch
-    zero_indices = np.where(avg_valid_loss == 0)[0]
-    if zero_indices.size > 0:
-        final_epoch = zero_indices[0]
-    else:
-        final_epoch = epoch
 
     # Log averaged results to W&B
-    for epoch in range(final_epoch):
-        wandb.log({
-            "epoch": epoch,
-            "avg_train_loss": avg_train_loss[epoch],
-            "avg_valid_loss": avg_valid_loss[epoch],
-            "avg_accuracy": avg_accuracy[epoch],
-            "avg_f1": avg_f1[epoch],
-            "avg_jaccard": avg_jaccard[epoch]
-        })
-    
+    best_train_losses = []
+    best_valid_losses = []
+    best_accuracies = []
+    best_f1s = []
+    best_jaccards = []
+
+    for run in range(args.repeat_run):
+        train_loss_run = utils.remove_tailzeros(train_loss_container[run, :])
+        valid_loss_run = utils.remove_tailzeros(valid_loss_container[run, :])
+        
+        best_train_loss = np.min(train_loss_run)
+        best_valid_loss = np.min(valid_loss_run)
+        best_accuracy = np.max(accuracy_container[run, :])
+        best_f1 = np.max(f1_container[run, :])
+        best_jaccard = np.max(jaccard_container[run, :])
+        
+        best_train_losses.append(best_train_loss)
+        best_valid_losses.append(best_valid_loss)
+        best_accuracies.append(best_accuracy)
+        best_f1s.append(best_f1)
+        best_jaccards.append(best_jaccard)
+
+    # Log averaged best results across all runs
+    wandb.log({
+        "avg_best_train_loss": np.mean(best_train_losses),
+        "avg_best_valid_loss": np.mean(best_valid_losses),
+        "avg_best_accuracy": np.mean(best_accuracies),
+        "avg_best_f1": np.mean(best_f1s),
+        "avg_best_jaccard": np.mean(best_jaccards)
+    })
+
+
     output_path = os.path.dirname(output_path[:-1])+'/'
     os.mkdir(output_path+'results')
-    utils.plot_error(avg_train_loss, avg_valid_loss, output_path)
+    utils.plot_error(train_loss_container.T, valid_loss_container.T, output_path)
     utils.print_log(torch.cuda.memory_summary(device=device), log_txt)
