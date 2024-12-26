@@ -8,13 +8,8 @@ from scipy.stats import gaussian_kde
 
 # Variables
 transcript_path = 'Transcripts/'
-transcript_set = ['OP_002.csv', 'OP_003.csv', 'OP_004.csv',
-                  'OP_007.csv', 'OP_009.csv', 'OP_011.csv', 'OP_013.csv',
-                  'OP_016.csv', 'OP_017.csv', 'OP_019.csv',
-                  'OP_024.csv', 'OP_026.csv', 'OP_029.csv', 'OP_030.csv',
-                  'OP_032.csv', 'OP_038.csv', 'OP_039.csv', 'OP_040.csv']  # 006 -> 500+, 22 --> 230+
-transcripts = [os.path.join('Transcripts/', s)
-               for s in transcript_set]
+transcripts = [os.path.join(transcript_path, s)
+               for s in os.listdir(transcript_path)]
 
 topics = pd.read_csv('Utils/topics.csv', index_col=0)
 personae = pd.read_csv('Utils/personae.csv', index_col=0)
@@ -221,7 +216,7 @@ def check_format(block, columns, generation_tag='*Ausfüllen*'):
 def phase_count_limits(dataset):
     min_lower_limit = 2
     min_upper_limit = 10
-    tolerence_percentage = 0.4
+    tolerence_percentage = 0.2
     phase_count = np.zeros((len(dataset), 8), dtype=int)
 
     for i, d in enumerate(dataset):
@@ -305,8 +300,10 @@ def sample_time_stamps(phase_lengths):
 def sample_daily_percentage():  # values precomputed
     return 0.28 + np.random.uniform(-0.07, 0.07)
 
-def sample_breath_percentage():
+
+def sample_breath_percentage(): # values precomputed
     return 0.09 + np.random.uniform(-0.08, 0.08)
+
 
 def sample_daily_topic():
     return topics.loc[np.random.randint(1, len(topics)), 'Thema']

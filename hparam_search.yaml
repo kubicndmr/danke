@@ -1,0 +1,23 @@
+program: spr.py
+method: bayes
+metric:
+  goal: maximize
+  name: Accuracy
+parameters:
+  syn_dataset_size:
+    value: 600
+  real_dataset_size:
+    value: 36
+  batch_size:
+    value: 512
+  learning_rate:
+    values: [5e-6, 1e-5, 5e-5, 1e-4, 5e-4, 1e-3]
+  weight_decay:
+    values: [1e-7, 5e-7, 1e-6, 5e-6, 1e-5, 5e-5]
+  sentence_dropout:
+    value: 0
+  model_dropout:
+    values: [0, 0.15, 0.3, 0.5]
+  model_dim:
+    values: [256, 512, 1024]
+run_cap: 20

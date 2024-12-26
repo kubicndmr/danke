@@ -1,5 +1,4 @@
 import torch
-import utils
 import numpy as np
 import pandas as pd
 
@@ -18,14 +17,14 @@ class SPRDataset(Dataset):
 
     def get_data(self, data_path, batch_size):
         df = pd.read_pickle(data_path)
+        df = df[df['Phase_Label'] != 8]
         if len(df) % batch_size == 1:
             df = df.iloc[:-1]
         return df
 
     def phase_count(self):
         array_count = np.zeros(8, dtype=int)
-        phases = self.data['Phase_Label'].astype(int).value_counts().drop(
-            8, errors='ignore')
+        phases = self.data['Phase_Label'].astype(int).value_counts()
         array_count[phases.index] = phases.values
         return array_count
 
@@ -33,21 +32,20 @@ class SPRDataset(Dataset):
         return len(self.data)
 
 
-def get_dataset(data_path, log_txt, num_train_ops, batch_size):
-    datasets = []
-    data_splits = utils.data_split(data_path,
-                                   log_txt,
-                                   num_train_ops
-                                   )
+def get_dataset(data_list: list, batch_size: int):
+    data_loaders = [
+        DataLoader(
+            dataset=SPRDataset(data_path, batch_size),
+            batch_size=batch_size,
+            shuffle=False,
+            pin_memory=True
+        ) for data_path in data_list
+    ]
 
-    for data_list in data_splits:
-        split_loaders = [
-            DataLoader(
-                dataset=SPRDataset(data_path, batch_size),
-                batch_size=batch_size,
-                shuffle=False
-            ) for data_path in data_list
-        ]
-        datasets.append(split_loaders)
+    data_size = np.sum([d_l.dataset.__len__() for d_l in data_loaders])
+    data_batchsize = np.sum(
+        [1 for data_loader in data_loaders for _, _, _ in data_loader])
 
-    return datasets
+    return {'data': data_loaders,
+            'size': data_size,
+            'batch_size': data_batchsize}
