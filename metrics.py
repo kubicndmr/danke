@@ -9,7 +9,7 @@ from sklearn.metrics import recall_score
 from sklearn.metrics import jaccard_score
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import precision_score
-
+from sklearn.metrics import confusion_matrix
 
 class SPRMetrics:
     def __init__(self, log_txt, output_path, epochs):
@@ -23,6 +23,7 @@ class SPRMetrics:
         self.op_gt = []
         self.op_pr = []
         self.op_metrics = []
+        self.confusion_matrices = []
 
     def batch(self, ground_truth, predicted):
         # Select prediction
@@ -55,7 +56,8 @@ class SPRMetrics:
             'F1_Score': f1_score(ground_truth, prediction, average='macro', zero_division=0.0),
             'Recall': recall_score(ground_truth, prediction, average='macro', zero_division=0.0),
             'Precision': precision_score(ground_truth, prediction, average='macro', zero_division=0.0),
-            'Jaccard': jaccard_score(ground_truth, prediction, average='macro', zero_division=0.0)
+            'Jaccard': jaccard_score(ground_truth, prediction, average='macro', zero_division=0.0),
+            'Confusion_Matrix': confusion_matrix(ground_truth, prediction, labels=range(8)),
         }
         self.op_metrics.append(metrics)
 
@@ -86,6 +88,10 @@ class SPRMetrics:
 
             self.metrics[epoch, i] = avg_metric
 
+        # Get list of confusion matrices
+        self.confusion_matrices.append([metrics['Confusion_Matrix']
+                                   for metrics in self.op_metrics])
+
         # Reset memory
         self.op_metrics = []
         self.epoch += 1
@@ -109,10 +115,13 @@ class SPRMetrics:
                             display=True)
             
             plt.plot(utils.remove_tailzeros(metric_values), label=metric)
+            
+            if metric == 'Accuracy':
+                best_epoch = max_epoch
 
         plt.xlabel('Epochs', fontsize=18)
         plt.legend(loc="upper left", fontsize=12)
         plt.savefig(self.output_path+f'results/{mode}_metrics.jpg')
         plt.close('all')
 
-        return max_values
+        return max_values, self.confusion_matrices[best_epoch]

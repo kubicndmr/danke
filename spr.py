@@ -275,20 +275,22 @@ def fit(args):
     #######################################
     ## Plot final error/metric functions ##
     #######################################
-    metrics_train.eval_end(f'pretrain_train')
-    metrics_valid.eval_end(f'pretrain_validation')
+    if syntrainset['batch_size'] != 0:
+        metrics_train.eval_end(f'pretrain_train')
+        metrics_valid.eval_end(f'pretrain_validation')
 
-    utils.plot_error(error_train,
-                     error_valid,
-                     output_dir,
-                     'pretrain_'
-                     )
+        utils.plot_error(error_train,
+                        error_valid,
+                        output_dir,
+                        'pretrain_'
+                        )
 
     ###############################################################
     ####################### Start Finetuning! #####################
     ###############################################################
     results = np.zeros((args.n_splits, len(metrics_train.metric_keys)))
-
+    confusion_matrices = []
+    
     ######################
     ## K-Fold Iteration ##
     ######################
@@ -411,8 +413,9 @@ def fit(args):
         ## Plot final error/metric functions ##
         #######################################
         metrics_train_ft.eval_end(f"finetune_{fold+1}_train")
-        results[fold, :] = metrics_valid_ft.eval_end(
+        results[fold, :], confusion_matrices_fold = metrics_valid_ft.eval_end(
             f"finetune_{fold+1}_validation")
+        confusion_matrices.extend(confusion_matrices_fold)
 
         utils.plot_error(error_train_ft,
                          error_valid_ft,
@@ -421,6 +424,8 @@ def fit(args):
                          )
 
     # Log Average Results
+    utils.plot_confusion_matrix(confusion_matrices, output_dir)
+    
     results_std = np.std(results, axis=0)
     results_mean = np.mean(results, axis=0)
     for idx, metric in enumerate(metrics_valid_ft.metric_keys):
@@ -469,11 +474,11 @@ if __name__ == '__main__':
                         help='embedding dimension of the model')
 
     parser.add_argument('--real_data_path',
-                        type=str, default="Dataset/PoCaP/",
+                        type=str, default="/DATA/kubi/Dataset/PoCaP/",
                         help='path to real dataset')
 
     parser.add_argument('--syn_data_path',
-                        type=str, default="Dataset/SynPoCaP/",
+                        type=str, default="/DATA/kubi/Dataset/SynPoCaP/",
                         #type=str, default="/DATA/kubi/SynVersions/SynPoCaP-MAC750/",
                         help='path to synthetic dataset')
 

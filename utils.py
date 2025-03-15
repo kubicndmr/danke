@@ -439,3 +439,22 @@ def compute_run_means(results_array):
     non_zero_counts = np.count_nonzero(results_array, axis=0)
     non_zero_counts[non_zero_counts == 0] = 1
     return non_zero_sum / non_zero_counts
+
+def plot_confusion_matrix(confusion_matrices, output_path):
+    
+    sum_cm = np.zeros((8, 8))
+    for cm in confusion_matrices:
+        sum_cm += cm
+    
+    # Normalize
+    sum_cm = sum_cm / sum_cm.sum(axis=1, keepdims=True)
+    
+    # Plot confusion matrix
+    plt.figure(dpi=600, constrained_layout=True)
+    plt.imshow(sum_cm, cmap='Blues')
+    plt.xticks(ticks=range(8), labels=range(8))
+    plt.yticks(ticks=range(8), labels=range(8))
+    plt.ylabel('True Phases', fontsize=20)
+    plt.xlabel('Predicted Phases', fontsize=20)
+    plt.savefig(f'{output_path}results/confusion_matrix.png', bbox_inches='tight')
+    plt.close()
