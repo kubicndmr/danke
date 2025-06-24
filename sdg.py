@@ -1,5 +1,4 @@
 import os
-import sys
 import time
 import torch
 import argparse
@@ -13,11 +12,6 @@ from dotenv import load_dotenv
 from transformers import AutoTokenizer
 from transformers import AutoModelForCausalLM
 
-
-DEBUG_MODE = False
-if DEBUG_MODE:
-    torch.manual_seed(1)
-    torch.cuda.manual_seed(1)
 
 ####################################### Generation Functions #######################################
 
@@ -47,12 +41,6 @@ def get_answer(tokenizer, language_model, messages, max_new_tokens,
     # Encode the prompt to input tensor
     inputs = tokenizer.encode(prompt, return_tensors="pt")
 
-    # Output
-    if DEBUG_MODE:
-        with open('prompt.txt', 'w') as f:
-            f.write(prompt)
-            f.write(f"\n\nPrompt has {len(inputs[0])} tokens")
-
     # Generate the model's response
     outputs = language_model.generate(
         # **inputs,
@@ -71,17 +59,21 @@ def get_answer(tokenizer, language_model, messages, max_new_tokens,
     response = sdg_helper.extract_model_response(
         response, instruction_tag='model')
 
-    # Output
-    if DEBUG_MODE:
-        with open('response.txt', 'w') as f:
-            f.write(response)
-
     return response
 
 
-def gen_data(tokenizer, language_model, prompter, save_name):
+def gen_data(tokenizer, language_model, prompter):
     '''
-    Generates synthetic data
+    Generates synthetic data using a language model and a prompter.
+
+    Parameters:
+    tokenizer: The tokenizer to process the text.
+    language_model: The language model to generate the responses.
+    prompter: An instance of SDGPrompts to generate prompts for the language model.
+
+    Returns:
+    result_df: A DataFrame containing the generated synthetic data.
+    messages_log: A list of dictionaries containing the chat history with the language model.
     '''
     # Variables
     limit_try = 5
@@ -176,15 +168,8 @@ def gen_data(tokenizer, language_model, prompter, save_name):
                 n_try = limit_try
                 steps_complete[i] = 1
 
-            #if False:
+            # if False:
             except:
-                if DEBUG_MODE:
-                    with open(f'{save_name[:-4]}_Step_{i+1}_Try_{n_try}.txt', 'w') as f:
-                        f.write('\n'+'*'*50+' <Answer> '+'*'*50+'\n')
-                        f.write(answer)
-                        f.write('\n'+'*'*50+' <Prompt> '+'*'*50+'\n')
-                        f.write(prompt)
-
                 n_try += 1
                 max_new_tokens += 5
                 print(f'\t\tConnot genreate Step {i+1}, will try again')
@@ -252,10 +237,7 @@ if __name__ == "__main__":
         torch_dtype=torch.bfloat16,
         cache_dir=os.getenv('HF_CACHE_DIR')
     )
-    '''
-    auto_tokenizer = None
-    auto_language_model = None
-    '''
+
     # Prompts
     prompter = sdg_prompts.SDGPrompts()
 
@@ -293,7 +275,7 @@ if __name__ == "__main__":
             error_count = 0
 
         # uppps
-        #if False:
+        # if False:
         except:
             print(f"\t{save_name} could not generated. Trying again!")
             error_count += 1
