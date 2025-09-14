@@ -220,8 +220,6 @@ if __name__ == "__main__":
     error_patience = 3
     prefix_idx = args.prefix_index
     end_idx = prefix_idx + args.num_target - 1
-    # model_id = 'mistralai/Mistral-Large-Instruct-2407'
-    # model_id = 'mistralai/Mistral-Nemo-Instruct-2407'
     model_id = 'google/gemma-2-27b-it'
     
     # Login huggingface environment

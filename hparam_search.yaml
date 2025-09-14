@@ -5,9 +5,9 @@ metric:
   name: Accuracy
 parameters:
   syn_dataset_size:
-    value: 600
+    value: 150
   real_dataset_size:
-    value: 36
+    value: 38
   batch_size:
     value: 512
   learning_rate:

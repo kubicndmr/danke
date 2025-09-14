@@ -458,3 +458,28 @@ def plot_confusion_matrix(confusion_matrices, output_path):
     plt.xlabel('Predicted Phases', fontsize=20)
     plt.savefig(f'{output_path}results/confusion_matrix.png', bbox_inches='tight')
     plt.close()
+
+
+def output_dir(args):
+    if args.loss == 'WCE':
+        output_dir = (
+            f"logs/K[{args.n_splits}]Fold_nops[{args.syn_dataset_size}-{args.real_dataset_size}]_"
+            f"loss[{args.loss}]_wd[{args.weight_decay}]_lr[{args.learning_rate}]_mdrop[{args.model_dropout}]_"
+            f"sdrop[{args.sentence_dropout}]_dim[{args.model_dim}]/"
+        )
+    elif args.loss == 'Focal':
+        output_dir = (
+            f"logs/K[{args.n_splits}]Fold_nops[{args.syn_dataset_size}-{args.real_dataset_size}]_"
+            f"loss[{args.loss}]_alpha[{args.focal_alpha}]_gamma[{args.focal_gamma}]_"
+            f"wd[{args.weight_decay}]_lr[{args.learning_rate}]_mdrop[{args.model_dropout}]_"
+            f"sdrop[{args.sentence_dropout}]_dim[{args.model_dim}]/"
+        )
+    elif args.loss == 'LDAM':
+        output_dir = (
+            f"logs/K[{args.n_splits}]Fold_nops[{args.syn_dataset_size}-{args.real_dataset_size}]_"
+            f"loss[{args.loss}]_m[{args.ldam_m}]_s[{args.ldam_s}]_"
+            f"wd[{args.weight_decay}]_lr[{args.learning_rate}]_mdrop[{args.model_dropout}]_"
+            f"sdrop[{args.sentence_dropout}]_dim[{args.model_dim}]/"
+        )
+        
+    return output_dir

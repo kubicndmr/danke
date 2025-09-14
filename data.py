@@ -31,6 +31,12 @@ class SPRDataset(Dataset):
     def __len__(self):
         return len(self.data)
 
+    def op_type(self):
+        if self.op_name.startswith('Real'):
+            return 'real'
+        elif self.op_name.startswith('Syn'):
+            return 'syn'
+
 
 def get_dataset(data_list: list, batch_size: int):
     data_loaders = [
@@ -49,3 +55,12 @@ def get_dataset(data_list: list, batch_size: int):
     return {'data': data_loaders,
             'size': data_size,
             'batch_size': data_batchsize}
+    
+def get_phase_count(data_list: list, batch_size=512):
+    phases = np.zeros(8, dtype=int)
+    for data_path in data_list:
+        dataset = SPRDataset(data_path, batch_size)
+        phases += dataset.phase_count()
+        
+    return phases
+        

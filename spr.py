@@ -4,6 +4,7 @@ import wandb
 import torch
 import utils
 import model
+import losses
 import metrics
 import argparse
 import numpy as np
@@ -13,7 +14,7 @@ import numpy as np
 #################################################################
 
 
-def train_epoch(surgical_model, optimizer, train_dataset, ce_loss,
+def train_epoch(surgical_model, optimizer, train_dataset, criteria,
                 error_train, metrics_train, epoch, device, log_txt):
 
     surgical_model.train()
@@ -29,7 +30,7 @@ def train_epoch(surgical_model, optimizer, train_dataset, ce_loss,
             predict_ = surgical_model(embed_)
 
             # Loss
-            error = ce_loss(predict_, label_)
+            error = criteria(predict_, label_)
             error_train[epoch] += error.clone().detach()
 
             # Metrics
@@ -53,7 +54,7 @@ def train_epoch(surgical_model, optimizer, train_dataset, ce_loss,
 
     # Print Metrics
     utils.print_log(
-        f"""\tLoss [WCE]\t: {error_train[epoch].item():.5f}""",
+        f"""\tLoss [{args.loss}]\t: {error_train[epoch].item():.5f}""",
         log_txt, display=True)
     utils.print_log(
         f"\tLearning Rate\t: {optimizer.param_groups[0]['lr']}", log_txt, display=True)
@@ -62,8 +63,8 @@ def train_epoch(surgical_model, optimizer, train_dataset, ce_loss,
     metrics_train.epoch_end(epoch, False)
 
 
-def eval_epoch(surgical_model, valid_dataset, ce_loss,
-               error_valid, metrics_valid, epoch, device, log_txt):
+def eval_epoch(surgical_model, valid_dataset, criteria, error_valid, 
+               metrics_valid, epoch, device, log_txt, plot_ribbon):
 
     surgical_model.eval()
     for data_loader in valid_dataset['data']:
@@ -78,21 +79,21 @@ def eval_epoch(surgical_model, valid_dataset, ce_loss,
                 predict_ = surgical_model(embed_)
 
             # Loss
-            error_ce = ce_loss(predict_, label_)
+            error_ce = criteria(predict_, label_)
             error_valid[epoch] += error_ce.clone().detach()
 
             # Metrics
             metrics_valid.batch(label_, predict_)
 
         # Log OP
-        metrics_valid.op_end(data_loader.dataset.op_name, False)
+        metrics_valid.op_end(data_loader.dataset.op_name, plot_ribbon)
 
     # Scale Error Function
     error_valid[epoch] /= valid_dataset['batch_size']
 
     # Print Metrics
     utils.print_log(
-        f"""\tLoss [WCE]\t: {error_valid[epoch].item():.5f}""",
+        f"""\tLoss [{args.loss}]\t: {error_valid[epoch].item():.5f}""",
         log_txt, display=True)
 
     # Metrics Log
@@ -107,11 +108,7 @@ def fit(args):
     ####################
     ## Data and Paths ##
     ####################
-    output_dir = (
-        f"logs/KFold_PE_nops[{args.syn_dataset_size}-{args.real_dataset_size}]_"
-        f"wd[{args.weight_decay}]_lr[{args.learning_rate}]_mdrop[{args.model_dropout}]_"
-        f"sdrop[{args.sentence_dropout}]_dim[{args.model_dim}]/"
-    )
+    output_dir = utils.output_dir(args)
     wandb.run.name = output_dir[len("logs/"):]
 
     log_txt = utils.init_log(output_dir)
@@ -140,7 +137,7 @@ def fit(args):
     ## Training Parameters ##
     #########################
     params = {
-        "acc_patience_limit": 100,
+        "patience_limit": 5,
         "epochs_limit": 500,
         "delta_escb": 0,
     }
@@ -170,10 +167,26 @@ def fit(args):
         syntrainset["data"],
         os.path.join(output_dir, f'results/class_dist_syn.jpg')
     ).to(device)
-    ce_loss = torch.nn.CrossEntropyLoss(weight=phase_weights, reduction='mean')
+    
+    if args.loss == 'WCE':
+        criteria = losses.WCELoss(weight=phase_weights)
+    elif args.loss == 'Focal':
+        criteria = losses.FocalLoss(
+            weight=phase_weights,
+            alpha=args.focal_alpha,
+            gamma=args.focal_gamma
+        )
+    elif args.loss == 'LDAM':
+        phases = data.get_phase_count(dataset["syntrainset"])
+        criteria = losses.LDAMLoss(
+            cls_num_list=phases, 
+            max_m=args.ldam_m, 
+            s=args.ldam_s, 
+            weight=phase_weights
+        )
 
     utils.print_log('\n---{ Losses }---', log_txt)
-    utils.print_log(ce_loss, log_txt)
+    utils.print_log(criteria, log_txt)
     utils.print_log(f"Phase Weights: \n\t{phase_weights}", log_txt)
 
     ###############
@@ -193,15 +206,15 @@ def fit(args):
     ###############
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer,
-        mode='max',
+        mode='min',
         factor=0.5,
-        patience=params['acc_patience_limit']//4,
+        patience=params['patience_limit'],
         min_lr=0
     )
 
     utils.print_log('\n---{ Scheduler }---', log_txt)
     utils.print_log(scheduler, log_txt)
-    
+
     #############
     ## Metrics ##
     #############
@@ -216,8 +229,9 @@ def fit(args):
     ###################### Start Pretraining! #####################
     ###############################################################
     epoch = 0
-    best_avg_acc = 0
-    patience_acc = 0
+    patience = 0
+    best_error = np.inf
+    plot_ribbon = False
     best_model_state = None
     early_stopper_flag = False
 
@@ -229,7 +243,7 @@ def fit(args):
         train_epoch(surgical_model,
                     optimizer,
                     syntrainset,
-                    ce_loss,
+                    criteria,
                     error_train,
                     metrics_train,
                     epoch,
@@ -241,30 +255,32 @@ def fit(args):
         utils.print_log(f'\nEpoch [valid]: {epoch}', log_txt, display=True)
         eval_epoch(surgical_model,
                    syntestset,
-                   ce_loss,
+                   criteria,
                    error_valid,
                    metrics_valid,
                    epoch,
                    device,
-                   log_txt
+                   log_txt,
+                   plot_ribbon
                    )
 
         # Scheduler
-        avg_acc = metrics_valid.metrics[epoch, 0]
-        scheduler.step(avg_acc)
-        utils.print_log(f'\tLearning Rate\t: {scheduler.get_last_lr()}', log_txt, display=True)
+        last_error = error_valid[epoch].item()
+        scheduler.step(last_error)
+        utils.print_log(
+            f'\tLearning Rate\t: {scheduler.get_last_lr()}', log_txt, display=True)
 
-        # WCE Loss Check
-        if  avg_acc > best_avg_acc:
-            patience_acc = 0
-            best_avg_acc = avg_acc
+        # Loss Check
+        if last_error < best_error:
+            patience = 0
+            best_error = last_error
             best_model_state = surgical_model.state_dict()
         else:
-            patience_acc += 1
+            patience += 1
 
-        if patience_acc < params['acc_patience_limit']:
+        if patience < params['patience_limit']:
             utils.print_log(
-                f'\tACC Patience\t: {patience_acc}/{params["acc_patience_limit"]} ({avg_acc:.3f}/{best_avg_acc:.3f})', 
+                f'\tPatience\t: {patience}/{params["patience_limit"]} ({last_error:.3f}/{best_error:.3f})',
                 log_txt, display=True)
         else:
             early_stopper_flag = True
@@ -279,17 +295,19 @@ def fit(args):
         metrics_train.eval_end(f'pretrain_train')
         metrics_valid.eval_end(f'pretrain_validation')
 
-        utils.plot_error(error_train,
-                        error_valid,
-                        output_dir,
-                        'pretrain_'
-                        )
+        utils.plot_error(
+            error_train,
+            error_valid,
+            output_dir,
+            'pretrain_'
+        )
 
     ###############################################################
     ####################### Start Finetuning! #####################
     ###############################################################
-    results = np.zeros((args.n_splits, len(metrics_train.metric_keys)))
+    plot_ribbon = False
     confusion_matrices = []
+    results = np.zeros((args.n_splits, len(metrics_train.metric_keys)))
     
     ######################
     ## K-Fold Iteration ##
@@ -328,11 +346,26 @@ def fit(args):
             os.path.join(
                 output_dir, f'results/class_dist_fold{fold+1}_train.jpg')
         ).to(device)
-        ce_loss = torch.nn.CrossEntropyLoss(
-            weight=phase_weights, reduction='mean')
+
+        if args.loss == 'WCE':
+            criteria = losses.WCELoss(weight=phase_weights)
+        elif args.loss == 'Focal':
+            criteria = losses.FocalLoss(
+                weight=phase_weights,
+                alpha=args.focal_alpha,
+                gamma=args.focal_gamma
+            )
+        elif args.loss == 'LDAM':
+            phases = data.get_phase_count(dataset["syntrainset"])
+            criteria = losses.LDAMLoss(
+                cls_num_list=phases, 
+                max_m=args.ldam_m, 
+                s=args.ldam_s, 
+                weight=phase_weights
+            )
 
         utils.print_log('\n---{ Losses }---', log_txt)
-        utils.print_log(ce_loss, log_txt)
+        utils.print_log(criteria, log_txt)
         utils.print_log(f"Phase Weights: \n\t{phase_weights}", log_txt)
 
         ###############
@@ -358,8 +391,8 @@ def fit(args):
         error_valid_ft = torch.zeros(params['epochs_limit']).to(device)
 
         epoch = 0
-        patience_acc = 0
-        best_avg_acc = 0
+        patience = 0
+        best_error = 0
         early_stopper_flag = False
 
         while (epoch < params['epochs_limit']) and (early_stopper_flag == False):
@@ -368,7 +401,7 @@ def fit(args):
             train_epoch(surgical_model,
                         optimizer,
                         realtrainset,
-                        ce_loss,
+                        criteria,
                         error_train_ft,
                         metrics_train_ft,
                         epoch,
@@ -380,28 +413,31 @@ def fit(args):
             utils.print_log(f'\nEpoch [valid]: {epoch}', log_txt, display=True)
             eval_epoch(surgical_model,
                        realtestset,
-                       ce_loss,
+                       criteria,
                        error_valid_ft,
                        metrics_valid_ft,
                        epoch,
                        device,
-                       log_txt
+                       log_txt,
+                       plot_ribbon
                        )
+            
             # Scheduler
-            avg_acc = metrics_valid_ft.metrics[epoch, 0]
-            scheduler.step(avg_acc)
-            utils.print_log(f'\tLearning Rate\t: {scheduler.get_last_lr()}', log_txt, display=True)
-        
-            # WCE Loss Check
-            if avg_acc > best_avg_acc:
-                patience_acc = 0
-                best_avg_acc = avg_acc
-            else:
-                patience_acc += 1
+            last_error = error_valid_ft[epoch].item()
+            scheduler.step(last_error)
+            utils.print_log(
+                f'\tLearning Rate\t: {scheduler.get_last_lr()}', log_txt, display=True)
 
-            if patience_acc < params['acc_patience_limit']:
+            # Loss Check
+            if last_error > best_error:
+                patience = 0
+                best_error = last_error
+            else:
+                patience += 1
+
+            if patience < params['patience_limit']:
                 utils.print_log(
-                    f'\tACC Patience\t: {patience_acc}/{params["acc_patience_limit"]} ({avg_acc:.3f}/{best_avg_acc:.3f})', 
+                    f'\tPatience\t: {patience}/{params["patience_limit"]} ({last_error:.3f}/{best_error:.3f})',
                     log_txt, display=True)
             else:
                 early_stopper_flag = True
@@ -425,7 +461,7 @@ def fit(args):
 
     # Log Average Results
     utils.plot_confusion_matrix(confusion_matrices, output_dir)
-    
+
     results_std = np.std(results, axis=0)
     results_mean = np.mean(results, axis=0)
     for idx, metric in enumerate(metrics_valid_ft.metric_keys):
@@ -474,16 +510,15 @@ if __name__ == '__main__':
                         help='embedding dimension of the model')
 
     parser.add_argument('--real_data_path',
-                        type=str, default="/DATA/kubi/Dataset/PoCaP/",
+                        type=str, default="/DATA/kubi/Dataset/PoCaP-large-v3/",
                         help='path to real dataset')
 
     parser.add_argument('--syn_data_path',
                         type=str, default="/DATA/kubi/Dataset/SynPoCaP/",
-                        #type=str, default="/DATA/kubi/SynVersions/SynPoCaP-MAC750/",
                         help='path to synthetic dataset')
 
     parser.add_argument('--real_dataset_size',
-                        type=int, default=36,
+                        type=int, default=38,
                         help='number of operations to include in finetuning')
 
     parser.add_argument('--syn_dataset_size',
@@ -501,6 +536,27 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size',
                         type=int, default=512,
                         help='number of sentences in the batch')
+
+    parser.add_argument('--loss',
+                        type=str, default='WCE',
+                        choices=['WCE', 'Focal', 'LDAM'],
+                        help='Error function')
+
+    parser.add_argument('--focal_alpha',
+                        type=float, default=0.25,
+                        help='alpha parameter of Focal Loss')
+
+    parser.add_argument('--focal_gamma',
+                        type=float, default=2,
+                        help='alpha parameter of Focal Loss')
+    
+    parser.add_argument('--ldam_m',
+                        type=float, default=0.5,
+                        help='max m parameter of LDAM Loss')
+
+    parser.add_argument('--ldam_s',
+                        type=float, default=30,
+                        help='S parameter of LDAM Loss')
 
     args = parser.parse_args()
 
