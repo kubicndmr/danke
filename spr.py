@@ -63,7 +63,7 @@ def train_epoch(surgical_model, optimizer, train_dataset, criteria,
     metrics_train.epoch_end(epoch, False)
 
 
-def eval_epoch(surgical_model, valid_dataset, criteria, error_valid, 
+def eval_epoch(surgical_model, valid_dataset, criteria, error_valid,
                metrics_valid, epoch, device, log_txt, plot_ribbon):
 
     surgical_model.eval()
@@ -167,7 +167,7 @@ def fit(args):
         syntrainset["data"],
         os.path.join(output_dir, f'results/class_dist_syn.jpg')
     ).to(device)
-    
+
     if args.loss == 'WCE':
         criteria = losses.WCELoss(weight=phase_weights)
     elif args.loss == 'Focal':
@@ -179,9 +179,9 @@ def fit(args):
     elif args.loss == 'LDAM':
         phases = data.get_phase_count(dataset["syntrainset"])
         criteria = losses.LDAMLoss(
-            cls_num_list=phases, 
-            max_m=args.ldam_m, 
-            s=args.ldam_s, 
+            cls_num_list=phases,
+            max_m=args.ldam_m,
+            s=args.ldam_s,
             weight=phase_weights
         )
 
@@ -308,7 +308,7 @@ def fit(args):
     plot_ribbon = False
     confusion_matrices = []
     results = np.zeros((args.n_splits, len(metrics_train.metric_keys)))
-    
+
     ######################
     ## K-Fold Iteration ##
     ######################
@@ -358,9 +358,9 @@ def fit(args):
         elif args.loss == 'LDAM':
             phases = data.get_phase_count(dataset["syntrainset"])
             criteria = losses.LDAMLoss(
-                cls_num_list=phases, 
-                max_m=args.ldam_m, 
-                s=args.ldam_s, 
+                cls_num_list=phases,
+                max_m=args.ldam_m,
+                s=args.ldam_s,
                 weight=phase_weights
             )
 
@@ -421,7 +421,7 @@ def fit(args):
                        log_txt,
                        plot_ribbon
                        )
-            
+
             # Scheduler
             last_error = error_valid_ft[epoch].item()
             scheduler.step(last_error)
@@ -497,18 +497,6 @@ if __name__ == '__main__':
                         type=float,
                         help='regularizer of the optimizer')
 
-    parser.add_argument('--sentence_dropout',
-                        type=float,
-                        help='dropout probability')
-
-    parser.add_argument('--model_dropout',
-                        type=float,
-                        help='dropout probability')
-
-    parser.add_argument('--model_dim',
-                        type=int,
-                        help='embedding dimension of the model')
-
     parser.add_argument('--real_data_path',
                         type=str, default="/DATA/kubi/Dataset/PoCaP-large-v3/",
                         help='path to real dataset')
@@ -549,7 +537,7 @@ if __name__ == '__main__':
     parser.add_argument('--focal_gamma',
                         type=float, default=2,
                         help='alpha parameter of Focal Loss')
-    
+
     parser.add_argument('--ldam_m',
                         type=float, default=0.5,
                         help='max m parameter of LDAM Loss')
