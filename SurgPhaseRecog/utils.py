@@ -483,3 +483,24 @@ def output_dir(args):
         )
         
     return output_dir
+
+
+def print_trainable_layers(model, log_txt):
+    total_params = 0
+    trainable_params = 0
+    
+    print_log("\n=== Model Trainable Status ===", log_txt)
+    for name, param in model.named_parameters():
+        num_params = param.numel()
+        total_params += num_params
+        if param.requires_grad:
+            status = "Trainable 🔥"
+            trainable_params += num_params
+        else:
+            status = "Frozen ❄️"
+        print_log(f"{name:75} | {status}", log_txt)
+    print_log("==============================\n", log_txt)
+    print_log(f"Total parameters:      {total_params:,}", log_txt)
+    print_log(f"Trainable parameters:  {trainable_params:,}", log_txt)
+    print_log(f"Frozen parameters:     {total_params - trainable_params:,}", log_txt)
+    print_log("==========================================\n", log_txt)

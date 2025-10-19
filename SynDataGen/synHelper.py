@@ -11,10 +11,10 @@ transcript_path = 'Transcripts/'
 transcripts = [os.path.join(transcript_path, s)
                for s in os.listdir(transcript_path)]
 
-topics = pd.read_csv('Utils/topics.csv', index_col=0)
-personae = pd.read_csv('Utils/personae.csv', index_col=0)
-examples = pd.read_csv('Utils/examples.csv')
-problems = pd.read_csv('Utils/problems.csv', index_col=0)
+topics = pd.read_csv('SynDataGen/topics.csv', index_col=0)
+personae = pd.read_csv('SynDataGen/personae.csv', index_col=0)
+examples = pd.read_csv('SynDataGen/examples.csv')
+problems = pd.read_csv('SynDataGen/problems.csv', index_col=0)
 
 surgical_phases = {
     0: 'Vorbereitung', 1: 'Punktion', 2: 'Führungsdraht',

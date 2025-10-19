@@ -1,73 +1,70 @@
 import os
+os.environ['HF_HOME'] = "path"
+
 import time
 import torch
 import argparse
-import sdg_helper
-import sdg_prompts
 import numpy as np
 import pandas as pd
 import huggingface_hub
+import SynDataGen.synHelper as synHelper
+import SynDataGen.synPrompts as synPrompts
 
-from dotenv import load_dotenv
-from transformers import AutoTokenizer
-from transformers import AutoModelForCausalLM
+from transformers import AutoProcessor
+from transformers import AutoModelForImageTextToText
 
 
 ####################################### Generation Functions #######################################
+torch.set_float32_matmul_precision('high')
+torch._dynamo.config.cache_size_limit = 32
 
-
-def get_answer(tokenizer, language_model, messages, max_new_tokens,
-               do_sample=True, top_p=0.95, temperature=1.2, repetition_penalty=1.1):
+def get_answer(processor, language_model, messages, max_new_tokens,
+               do_sample=False, repetition_penalty=1.1):
     """
     Generates a response from the model based on the provided chat history.
 
     Parameters:
-    language_model: The language model to generate the response.
-    tokenizer: The tokenizer to process the text.
+    language_model: The language model to generate the response (MedGemma 3).
+    processor: The tokenizer to process the text and feature extractor.
     messages: A list of dictionaries containing the chat history.
-    max_new_tokens: The maximum number of new tokens to generate (default: 4096).
-    do_sample: Whether to sample the output (default: True).
-    top_p: The cumulative probability for top-p sampling (default: 0.95).
-    temperature: The temperature for sampling (default: 1).
+    max_new_tokens: The maximum number of new tokens to generate.
+    do_sample: Whether to sample the output (default: False).
+    repettition_penalty: Penalize repettitionscle
 
     Returns:
-    chat: Updated chat history with the assistant's response.
     response: The generated response from the model.
     """
-    # Prepare the prompt from the chat history
-    prompt = tokenizer.apply_chat_template(
-        messages, tokenize=False, add_generation_prompt=True)
-
     # Encode the prompt to input tensor
-    inputs = tokenizer.encode(prompt, return_tensors="pt")
+    inputs = processor.apply_chat_template(
+        messages, add_generation_prompt=True, tokenize=True,
+        return_dict=True, return_tensors="pt",
+    ).to(language_model.device, dtype=torch.bfloat16)
+    
+    input_len = inputs["input_ids"].shape[-1]
 
     # Generate the model's response
-    outputs = language_model.generate(
-        # **inputs,
-        input_ids=inputs.to(language_model.device),
-        pad_token_id=tokenizer.eos_token_id,
-        eos_token_id=tokenizer.eos_token_id,
-        max_new_tokens=max_new_tokens,
-        do_sample=do_sample,
-        top_p=top_p,
-        temperature=temperature,
-        repetition_penalty=repetition_penalty
-    )
+    with torch.inference_mode():
+        output = language_model.generate(
+            **inputs,
+            max_new_tokens=max_new_tokens,
+            do_sample=do_sample,
+            repetition_penalty=repetition_penalty,
+            use_cache=True,
+        )
+        output = output[0][input_len:]
 
     # Decode the model's output and update the chat history
-    response = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    response = sdg_helper.extract_model_response(
-        response, instruction_tag='model')
+    response = processor.decode(output, skip_special_tokens=True)
 
     return response
 
 
-def gen_data(tokenizer, language_model, prompter):
+def gen_data(processor, language_model, prompter):
     '''
     Generates synthetic data using a language model and a prompter.
 
     Parameters:
-    tokenizer: The tokenizer to process the text.
+    processor: The tokenizer to process the text and feature extractor.
     language_model: The language model to generate the responses.
     prompter: An instance of SDGPrompts to generate prompts for the language model.
 
@@ -83,16 +80,16 @@ def gen_data(tokenizer, language_model, prompter):
     prompter.init_OR()
 
     # Get op draft
-    df = sdg_helper.draft_OP()
+    df = synHelper.draft_OP()
 
     # Sliding Window
     dfs_to_concat = []
-    df_splits = sdg_helper.df_splitter(df)
+    df_splits = synHelper.df_splitter(df)
     steps_complete = np.zeros(len(df_splits))
 
     for i, answer_df in enumerate(df_splits):
         answer_df['Phase'] = answer_df['Phase'].map(
-            sdg_helper.surgical_phases)
+            synHelper.surgical_phases)
 
         person = answer_df['Person'].iloc[0]
         if (answer_df['Schritt'] != 'Alltäglich').any():
@@ -110,13 +107,13 @@ def gen_data(tokenizer, language_model, prompter):
             max_new_tokens = tokens_per_row*len(answer_df) + template_tokens
         else:
             print('The person has a problem')
-        
+
         # Manage chat
         if len(dfs_to_concat) == 0:
             prompt = prompter.get_prompt(
                 person, False, None, answer_df, step_label, step_count)
-                        
-            messages = [{"role": "user", "content": prompt}]
+
+            messages = [{"role": "user", "content": [{"type": "text", "text": prompt}]}]
             messages_log = messages.copy()
 
         else:
@@ -128,7 +125,7 @@ def gen_data(tokenizer, language_model, prompter):
             prompt = prompter.get_prompt(
                 person, True, step_df, answer_df, step_label, step_count)
 
-            messages = [{"role": "user", "content": prompt}]
+            messages = [{"role": "user", "content": [{"type": "text", "text": prompt}]}]
             messages_log.extend(messages)
 
         # Try limit_try times, if LM cant follow instructions
@@ -140,35 +137,35 @@ def gen_data(tokenizer, language_model, prompter):
                     f'\tStep: {int(i+1)}/{len(df_splits)}\t|\tMax new tokens: {max_new_tokens}')
 
                 # Generate Answer
-                answer = get_answer(tokenizer, language_model,
+                answer = get_answer(processor, language_model,
                                     messages, max_new_tokens=max_new_tokens)
 
                 # Extract tagged block
-                block_answer = sdg_helper.get_tagged_block(
+                block_answer = synHelper.get_tagged_block(
                     answer, '<Antwort>', '</Antwort>')
 
                 # Check line shapes/errors
-                block_answer = sdg_helper.line_errors(
+                block_answer = synHelper.line_errors(
                     block_answer, len(answer_df))
 
                 # Check format
-                correct_format = sdg_helper.check_format(block_answer, [
+                correct_format = synHelper.check_format(block_answer, [
                     'Index', 'Startzeit', 'Schritt', 'Phase', 'Person', 'Text'])
                 if not correct_format:
                     raise ValueError(f"Columns or rows do not match")
 
                 # Concat
-                dfs_to_concat.append(sdg_helper.block_to_df(block_answer))
+                dfs_to_concat.append(synHelper.block_to_df(block_answer))
 
                 # Add to chat
                 messages_log.append(
-                    {"role": "assistant", "content": answer})
+                    {"role": "assistant", "content": [{"type": "text", "text": answer}]})
 
                 # Exit loop
                 n_try = limit_try
                 steps_complete[i] = 1
 
-            # if False:
+            #if False:
             except:
                 n_try += 1
                 max_new_tokens += 5
@@ -180,7 +177,7 @@ def gen_data(tokenizer, language_model, prompter):
     result_df = pd.concat(dfs_to_concat)
     result_df = result_df[['Startzeit', 'Person', 'Text', 'Schritt', 'Phase']]
     result_df['Phase_Label'] = result_df['Phase'].map(
-        sdg_helper.reversed_surgical_phases)
+        synHelper.reversed_surgical_phases)
     result_df['Text'] = result_df['Text'].str.strip()
     result_df['Text'] = result_df['Text'].str.strip('*')
     result_df['Text'] = result_df['Text'].str.strip('"""')
@@ -220,24 +217,24 @@ if __name__ == "__main__":
     error_patience = 3
     prefix_idx = args.prefix_index
     end_idx = prefix_idx + args.num_target - 1
-    model_id = 'google/gemma-2-27b-it'
-    
+    model_id = 'google/gemma-3-27b-it' #'google/gemma-2-2b-it'
+
     # Login huggingface environment
-    load_dotenv()
-    huggingface_hub.login(os.getenv('HF_TOKEN'), add_to_git_credential=False)
+    huggingface_hub.login("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", add_to_git_credential=False)
 
     # Model
-    auto_tokenizer = AutoTokenizer.from_pretrained(
-        model_id, cache_dir=os.getenv('HF_CACHE_DIR'))
-    auto_language_model = AutoModelForCausalLM.from_pretrained(
+    auto_processor = AutoProcessor.from_pretrained(
+        model_id
+    )
+
+    auto_language_model = AutoModelForImageTextToText.from_pretrained(
         model_id,
         device_map='auto',
-        torch_dtype=torch.bfloat16,
-        cache_dir=os.getenv('HF_CACHE_DIR')
+        torch_dtype=torch.bfloat16
     )
 
     # Prompts
-    prompter = sdg_prompts.SDGPrompts()
+    prompter = synPrompts.SDGPrompts()
 
     # Generate Data
     while prefix_idx <= end_idx and error_count < error_patience:
@@ -245,16 +242,15 @@ if __name__ == "__main__":
         try:
             # set save name
             save_name = os.path.join(
-                args.target_path, sdg_helper.prefix(prefix_idx+1, 'SynOP_')+".csv")
+                args.target_path, synHelper.prefix(prefix_idx+1, 'SynOP_')+".csv")
             print(f"Generating: {save_name}")
 
             # generate data
             generation_start = time.time()
             df, log_container = gen_data(
-                tokenizer=auto_tokenizer,
+                processor=auto_processor,
                 language_model=auto_language_model,
-                prompter=prompter,
-                save_name=save_name
+                prompter=prompter
             )
 
             # save & update
@@ -264,7 +260,7 @@ if __name__ == "__main__":
             with open(save_name[:-4] + ".txt", "w") as f:
                 for l in log_container:
                     f.write('\n'+'*'*50+' <'+l['role']+'> '+'*'*50+'\n')
-                    f.write(l['content'])
+                    f.write(l['content'][0]['text'])
                 f.write(
                     f'\nElapsed time:\t{time.time() - generation_start}(s)')
 
@@ -272,8 +268,7 @@ if __name__ == "__main__":
             prefix_idx += 1
             error_count = 0
 
-        # uppps
-        # if False:
+        #if False:
         except:
             print(f"\t{save_name} could not generated. Trying again!")
             error_count += 1

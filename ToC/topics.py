@@ -1,1 +1,0 @@
-prompt = """du bist ein chirurg und sprichst mit deinem patienten während der operation. du sprichst über alltägliche themen oder erzählen geschichten über deine früheren erfahrungen. erstelle eine liste mit 100 solchen themen für den chirurgen, die er mit dem patienten besprechen soll. gib diese im csv-format mit den spalten index und thema zurück"""

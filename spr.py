@@ -1,13 +1,13 @@
 import os
-import data
 import wandb
 import torch
-import utils
-import model
-import losses
-import metrics
 import argparse
 import numpy as np
+import SurgPhaseRecog.data as data
+import SurgPhaseRecog.utils as utils
+import SurgPhaseRecog.model as model
+import SurgPhaseRecog.losses as losses
+import SurgPhaseRecog.metrics as metrics
 
 #################################################################
 ################ Epoch Train/Validation Functions ###############
@@ -154,12 +154,8 @@ def fit(args):
     ).to(device)
 
     utils.print_log('\n---{ Model }---', log_txt)
-    utils.print_log(surgical_model, log_txt)
-    trainable_params = sum(p.numel()
-                           for p in surgical_model.parameters() if p.requires_grad)
-    utils.print_log(
-        f'\nNumber of trainable parameters: {trainable_params:,}\n', log_txt)
-
+    utils.print_trainable_layers(surgical_model, log_txt)
+    
     ####################
     ## Loss functions ##
     ####################

@@ -4,7 +4,7 @@ class SurgConfig:
         "llm":"bert",
         "model_name":"bert-base-uncased",
         "freeze" : True,
-        "freeze_layers": 5,
+        "freeze_layers": 10,
     }
     
     # Classifier

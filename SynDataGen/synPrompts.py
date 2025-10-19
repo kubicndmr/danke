@@ -1,4 +1,4 @@
-import sdg_helper
+import SynDataGen.synHelper as sdg_helper
 
 from num2words import num2words
 
@@ -70,7 +70,8 @@ class SDGPrompts:
     - Schritt 7.1 Steriles Pflaster auflegen: Über der Naht wird ein steriles Pflaster angebracht, um die Wunde zu schützen.
     - Schritt 7.2 Tisch fährt nach unten: Der Operationstisch wird abgesenkt, um den Patienten sicher vom Tisch zu transferieren."""
         elif step_label == 'Alltäglich':
-            pass
+            return """
+    - Alltäglich: Gespräche über täglichen Themen."""
         else:
             raise ValueError('Etwas ist schiefgelaufen')
 
@@ -95,17 +96,17 @@ Das Ziel ist es, realistische, hochwertige, einzigartige, und medizinisch korrek
 Die chirurgischen Schritte der laufenden Phase sind: {self.get_step_description(step_label)}
 """
 
-        if step_label != 'Alltäglich':
+        if step_label == 'Alltäglich':
             prompt += f"""
-* reale Daten: Im Folgenden findest du ein Beispiele für reale Gespräche, die der Radiologe in der laufenden Phase geführt haben:
-<reale Daten>
-{sdg_helper.sample_real_phase(step_label)}</reale Daten>
-
-* Satzgruppen: Häufig verwendete Ausdrücke der Radiologen bei realen Operationen wurden extrahiert und ähnliche Sätze der gleichen Phasen wurden gruppiert. Für die laufende Phase sind unten <{num2words(n_examples, lang='de')}> Beispielsätze mit Erklärungen angegeben:
-    {sdg_helper.sample_pocap_example(phase=answer_df['Phase'].iloc[0], n_examples=n_examples)}
-
-* Röntgenbildgebung: Wenn die Textspalte mit '*Atemkommando*' markiert ist, weise den Patienten an, seine Atmung während der Röntgenaufnahme zu kontrollieren. Beispielsätze, die du ähnliche Ausdrücke verwendest kann, sind folgendes: 
-    -tief einatmen luft anhalten -ganz tief einatmen luft -einatmen luft anhalten atmen -bitte ganz tief einatmen -einatmen ausatmen luft anhalten -tief einathmen luft anhalten -nochmal einatmen ausatmen nochmal -nochmal tief einatmen luft -mal ganz tief einatmen -nochmal einatmen ausatmen luft -mal tief einatmen luft -luft anhalten atmen bewegen -nochmal ganz tief einatmen -ganz tief einathmen luft -bitte tief einatmen luft -bitte mal tief einatmen -einatmen ausatmen nochmal kräftig -drückt brennt bisschen haut -herr *PatientName* luft anhalten -bekommen gleich nochmal atemkommando>
+* Gesprächsthemen: Radiologen sprechen gelegentlich mit Patienten über Themen, die für die aktuelle Operation nicht relevant sind. Dies ist notwendig, um die Patienten zu entspannen und die Atmosphäre im Operationssaal aufzulockern. 
+Im laufenden Schritt, führe solche Unterhaltungen über das Thema: {self.topic}.
+"""
+        else:
+            prompt += f"""
+* Röntgenbildgebung: Wenn die Textspalte mit '*Atemkommando*' markiert ist, weise den Patienten an, seine Atmung während der Röntgenaufnahme zu kontrollieren. Es ist notwending, um Bewegungsartefakte zu vermeiden und eine klare Darstellung der Katheterlage zu gewährleisten. 
+Während der Portkatheteranlage müssen Patienten ihre Atmung in verschiedenen Phasen gezielt kontrollieren. Zu Beginn, bei der Gefäßpunktion und Führung des Katheters, wird meist eine ruhige, normale Atmung angewiesen. Bei der Platzierung des Katheters und der abschließenden Lagekontrolle durch Röntgen sind hingegen häufig tiefe Atemzüge und kurzes Luftanhalten erforderlich, damit Strukturen klar sichtbar bleiben. 
+In manchen Fällen wird das Atemkommando mehrmals wiederholt, um exakte Aufnahmen und die korrekte Positionierung des Katheters sicherzustellen. Einige beispielsätze sind folgendes: 
+    -tief einatmen luft anhalten -ganz tief einatmen luft -einatmen luft anhalten atmen -bitte ganz tief einatmen -einatmen ausatmen luft anhalten -tief einathmen luft anhalten -*PatientName* luft anhalten
 
 * Fachwörter: Radiologen verwenden häufig die folgenden Fachbegriffe. Verwende ähnliche Fachbegriffe, wenn sie die laufende Tätigkeit und das Gespräch weitergeben. Die technischen Begriffe und ihre Bedeutungen sind wie folgt:
     - Kranial: in Richtung Kopf
@@ -131,25 +132,24 @@ Die chirurgischen Schritte der laufenden Phase sind: {self.get_step_description(
 
 * Aufgabe: Du wirst die Konversationen der Radiologen im Abschnitt <Antwort>, die mit '*Ausfüllen*' markiert sind, ergänzen, indem du die chirurgischen Phasen und Schritte berücksichtigst. Du ahmst die Persona des angegebenen Radiologen nach, wenn du Sätze erzeugst. Du wirst dann die Konversationen des gesamten Operation Teil für Teil erstellen. In diesem Teil wirst du die Daten für den angegebenen Abschnitt in der Vorlage <Antwort> generieren.
 
-* Strategie: Zunächst fasst du deine Aufgabe in dem Abschnitt <Zusammenfassung> zusammen. Danach fahre mit der Generierung von Sätzen fort. Während du Sätze bildest: 1) Lies reale Gespräche im <reale Daten>-Abschnitt sorgfältig durch und verstehe, wie die Radiologen kommunizieren. 2) Lies frühere Gespräche, die im Punkt 'Kontext' unten gegeben sind, und analysiere, inwieweit Fortschritte bei diesem Thema gemacht worden sind. Nutze dafür die Informationen im Punkt „Überblick“ unten. 3) Plane das Tempo des Fortschritts und der dazugehörenden Gespräche entsprechend. Erzähle nicht alles zu Beginn der Phase/Schritt und wiederhole es viele Male. Plane sorgfältig und verteile die notwendigen Aktivitäten auf vorgegebene leere Gesprächsfelder. 4) Generiere Säzte. Verwende dein Verständnis und die Analyse der vorherigen drei Punkte bei der Satzbildung.
+* Strategie: Zunächst fasst du deine Aufgabe in dem Abschnitt <Zusammenfassung> zusammen. Danach fahre mit der Generierung von Sätzen fort. Während du Sätze bildest: 1) Lies frühere Gespräche, die im Punkt 'Kontext' unten gegeben sind, und analysiere, inwieweit Fortschritte bei diesem Thema gemacht worden sind. Nutze dafür die Informationen im Punkt „Überblick“ unten. 2) Plane das Tempo des Fortschritts und der dazugehörenden Gespräche entsprechend. Erzähle nicht alles zu Beginn der Phase/Schritt und wiederhole es viele Male. Plane sorgfältig und verteile die notwendigen Aktivitäten auf vorgegebene leere Gesprächsfelder. 3) Generiere Säzte. Verwende dein Verständnis und die Analyse der vorherigen drei Punkte bei der Satzbildung.
 
 * Nörtralität: Bewahre in deinen Gesprächen möglichst einen neutralen ton. Erstelle eine gleichmäßige Anzahl von positiven und negativen Sätzen. Jeder positive Satz sollte durch einen ebenso negativen Satz ausgeglichen werden. Verwende neutrale Sprache, wo es möglich ist, aber achte darauf, dass die Anzahl positiver und negativer Sätze gleich bleibt.
 
-* Sprache [SEHR WICHTIG!]:
+* Sprache [WICHTIG!]:
     - Erzeuge natürliche Gespräche mit dem Patienten und dem Assistenten, und BEANTWORTE IHRE FRAGEN ODER KOMMENTARE.
-    - MACHE GRAMMATIKALISCHE FEHLER. Echte Gespräche sind nicht streng strukturiert. Beobachte echte Daten und bilde ähnlich fehlerhafte, aber natürliche Sätze. 
-    - Achte darauf, dass der Übergang zwischen den Phasen und Schritten natürlich erfolgt.
+    - MACHE GRAMMATIKALISCHE FEHLER. Echte Gespräche sind nicht streng strukturiert. Antworte mit den natürlichen Sätze. 
+    - Achte darauf, dass der Übergang zwischen den Phasen und Schritten natürlich erfolgt. Ändere das Gesprächsthema nicht sofort.
     - Halte deine Sätze in angemessener Länge. SCHREIBE IN JEDER TEXTFELD DURCHSCHNITTLICH <SIEBEN - ACHT WÖRTER>.
     - Um sicherzustellen, dass die generierten Sätze medizinisch korrekt sind, verwende die in den Spalten 'Schritt' und 'Phase' angegebenen Informationen und generiere korrekte Gespräche.
     - FOKUS LIEGT AUF PRÄZISEN MEDIZINISCHEN ANWEISUNGEN. Spreche präzise und direkt.
     - Wenn in der Spalte 'Schritt' 'Alltäglich' steht, führe ein alltägliches Gespräch. Fahre immer mit dem letzten Gesprächspunkt fort.
-    - Betrachte die angegebenen SATZGRUPPEN UND N-GRAMME, ECHTE MENSCHLICHE SPRACHMUSTER ZU IMITIEREN.
     - IMPLIZIERE DEINE HANDLUNGEN MANCHMAL, anstatt sie immer ausdrücklich zu benennen.
     - Verwende manchmal typische deutsche Füllwörter, um natürlicher zu klingen.
     - Vermeide unnötige Floskeln.
     - Verwende keine Emojis.
 
-* Format: Verwende die Vorlage im Abschnitt <Antwort> um deine Antwort zu geben und die Vorlage im Abschnitt <Zusammenfassung> um deine Zusammenfassung zu geben. Erzeuge nur die Vorlage mit der Überschrift in dem angegebenen <Antwort>-Abschnitt, füge keine neuen Zeilen hinzu. Gib deine anwort nur auf Deutsch und nutze CSV-Format im Abschnitt <Antwort> wie in der Vorlage. Verwende immer die Tags <Antwort> und </Antwort> am Anfang und Ende deiner Antwort, und <Zusammenfassung> und </Zusammenfassung> am Anfang und Ende deiner Zusammenfassung. Füge keine ``` codeblöcke oder ** Textblöcke hinzu, wenn sie nicht ausdrücklich dazu aufgefordert werden. Füge keine zusätzlichen Meldungen am Anfang oder Ende der Eingabeaufforderung ein.
+* Format [WICHTIG]: Verwende die Vorlage im Abschnitt <Antwort> um deine Antwort zu geben und die Vorlage im Abschnitt <Zusammenfassung> um deine Zusammenfassung zu geben. Erzeuge nur die Vorlage mit der Überschrift in dem angegebenen <Antwort>-Abschnitt, füge keine neuen Zeilen hinzu. Gib deine anwort nur auf Deutsch und nutze CSV-Format im Abschnitt <Antwort> wie in der Vorlage. Verwende immer die Tags <Antwort> und </Antwort> am Anfang und Ende deiner Antwort, und <Zusammenfassung> und </Zusammenfassung> am Anfang und Ende deiner Zusammenfassung. Füge keine ``` codeblöcke oder ** Textblöcke hinzu, wenn sie nicht ausdrücklich dazu aufgefordert werden. Füge keine zusätzlichen Meldungen am Anfang oder Ende der Eingabeaufforderung ein.
 """
         if iteration:
             sentence_idx = step_df[(step_df['Schritt'] == step_label) &
@@ -164,19 +164,17 @@ Die chirurgischen Schritte der laufenden Phase sind: {self.get_step_description(
 
         prompt += f"""
 <Zusammenfassung>
-Schreib hier
-    1. Fasse die Persona des Radiologen zusammen, den du simulieren wirst.
+Gib prägnante Antworte
+    1. Welche Persönlichkeit simulierst du?
     2. Was sind die chirurgische Schritte im angegebenen Datenbereich, die durchgeführt werden sollen?
-    3. Welche Fachwörter passen zu den laufenden Schritten?
-    4. Was ist die durchschnittliche Länge der Sätze, die du generieren wirst?
-    5. Was sind die Sprachanweisungen, die als SEHR WICHTIG markiert sind und du folgen musst?
+    3. Was sind die Sprachanweisungen, die als SEHR WICHTIG markiert sind und du folgen musst?
 </Zusammenfassung>
 """
         if iteration:
             prompt += """\nIn diesem Teil wirst du mit der Generierung des nächsten Abschnitts der Operationsdaten fortfahren. Fülle nur die angegebenen Daten im Abschnitt <Antwort> aus. Berücksichtige deine vorherige Antworte um konsistente Konversionen zu generieren.\n"""
-        
+
         prompt += f"\n<Antwort>\n{answer_df.to_csv(index=True, sep=';', index_label='Index')}</Antwort>\n"
-        
+
         return prompt
 
 
@@ -190,11 +188,13 @@ Das Ziel ist es, realistische und einzigartige Gespräche in einem Operationssaa
 * Daten: Du erhältst einen Datensatz mit fehlenden Unterhaltungen im Abschnitt <Antwort>. Die Daten enthalten einen Index, die Startzeit der Rede, eine Angabe wer spricht, den gesprochenen Satz, Bezeichnungen für die laufende Operationsschritte und die Operationsphase.
 
 * Aufgabe: Du wirst die Konversationen im Abschnitt <Antwort>, die mit '*Ausfüllen*' markiert sind, ergänzen. Die Splate 'Personen' zeigt, wer spricht gerade. Du berücksichtigst die bisherige Gespräche des Radiologen und Schritte und sprichst mit den Stil des vorgegebenen Personen. Schreibe in jeder 'Text' Spalte ungefähr <{num2words(10, lang='de')} Wörter>.
+
+* Format [WICHTIG]: Verwende die Vorlage im Abschnitt <Antwort> um deine Antwort zu geben. Erzeuge nur die Vorlage mit der Überschrift in dem angegebenen <Antwort>-Abschnitt, füge keine neuen Zeilen hinzu. Gib deine anwort nur auf Deutsch und nutze CSV-Format im Abschnitt <Antwort> wie in der Vorlage. Verwende immer die Tags <Antwort> und </Antwort> am Anfang und Ende deiner Antwort. Füge keine ``` codeblöcke oder ** Textblöcke hinzu, wenn sie nicht ausdrücklich dazu aufgefordert werden. Füge keine zusätzlichen Meldungen am Anfang oder Ende der Eingabeaufforderung ein.
 """
         if iteration:
             prompt += "\n* Kontext: Du ahmst die Persona der angegebenen Person in der Spalte 'Person' nach, wenn du Sätze erzeugst. Personen in der Spalte „Person“, die miteinander sprechen, berücksichtige bei der Erstellung neuer Sätze frühere Unterhaltungen. Bisherige Gespräche:"
             prompt += f"\n<Daten>\n{step_df.tail(n_context).to_csv(index=True, sep=';', index_label='Index')}</Daten>\n"
-            
+
         prompt += f"\n<Antwort>\n{answer_df.to_csv(index=True, sep=';', index_label='Index')}</Antwort>\n"
 
         return prompt
@@ -210,11 +210,13 @@ Das Ziel ist es, realistische und einzigartige Gespräche in einem Operationssaa
 * Daten: Du erhältst einen Datensatz mit fehlenden Unterhaltungen im Abschnitt <Antwort>. Die Daten enthalten einen Index, die Startzeit der Rede, eine Angabe wer spricht, den gesprochenen Satz, Bezeichnungen für die laufende Operationsschritte und die Operationsphase.
 
 * Aufgabe: Du wirst die Konversationen im Abschnitt <Antwort>, die mit '*Ausfüllen*' markiert sind, ergänzen. Die Splate 'Personen' zeigt, wer spricht gerade. Du berücksichtigst bisherige Gespräche und sprichst mit den Stil des vorgegebenen Personen. Schreibe in jeder 'Text' Spalte ungefähr <{num2words(10, lang='de')} Wörter>.
+
+* Format [WICHTIG]: Verwende die Vorlage im Abschnitt <Antwort> um deine Antwort zu geben. Erzeuge nur die Vorlage mit der Überschrift in dem angegebenen <Antwort>-Abschnitt, füge keine neuen Zeilen hinzu. Gib deine anwort nur auf Deutsch und nutze CSV-Format im Abschnitt <Antwort> wie in der Vorlage. Verwende immer die Tags <Antwort> und </Antwort> am Anfang und Ende deiner Antwort. Füge keine ``` codeblöcke oder ** Textblöcke hinzu, wenn sie nicht ausdrücklich dazu aufgefordert werden. Füge keine zusätzlichen Meldungen am Anfang oder Ende der Eingabeaufforderung ein.
 """
         if iteration:
             prompt += "\n* Kontext: Du ahmst die Persona der angegebenen Person in der Spalte 'Person' nach, wenn du Sätze erzeugst. Personen in der Spalte „Person“, die miteinander sprechen, berücksichtige bei der Erstellung neuer Sätze frühere Unterhaltungen. Bisherige Gespräche:"
             prompt += f"\n<Daten>\n{step_df.tail(n_context).to_csv(index=True, sep=';', index_label='Index')}</Daten>\n"
-            
+
         prompt += f"\n<Antwort>\n{answer_df.to_csv(index=True, sep=';', index_label='Index')}</Antwort>\n"
 
         return prompt
