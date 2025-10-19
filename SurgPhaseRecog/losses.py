@@ -1,7 +1,7 @@
 import torch
+import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
-import numpy as np
 
 
 class WCELoss(nn.Module):
@@ -24,21 +24,21 @@ class FocalLoss(nn.Module):
         self.alpha = alpha
         self.gamma = gamma
         self.weight = weight
-        
+
     def forward(self, predict, label):
         probs = F.softmax(predict, dim=1)
         targets = F.one_hot(label, num_classes=8).float()
-        
+
         ce_loss = -targets * torch.log(probs)
-        
+
         p_t = torch.sum(probs * targets, dim=1)
         focal_weight = (1 - p_t) ** self.gamma
-        
+
         loss = focal_weight.unsqueeze(1) * ce_loss
         return loss.mean()
 
 
-class LDAMLoss(nn.Module):    
+class LDAMLoss(nn.Module):
     def __init__(self, cls_num_list, max_m=0.5, s=30, weight=None):
         super(LDAMLoss, self).__init__()
         m_list = 1.0 / np.sqrt(np.sqrt(cls_num_list))
@@ -57,12 +57,36 @@ class LDAMLoss(nn.Module):
     def forward(self, x, target):
         index = torch.zeros_like(x, dtype=torch.uint8)
         index.scatter_(1, target.data.view(-1, 1), 1)
-        
+
         index_float = index.type(torch.cuda.FloatTensor)
-        batch_m = torch.matmul(self.m_list[None, :], index_float.transpose(0,1))
+        batch_m = torch.matmul(
+            self.m_list[None, :], index_float.transpose(0, 1))
         batch_m = batch_m.view((-1, 1))
         x_m = x - batch_m
-    
+
         output = torch.where(index, x_m, x)
 
-        return F.cross_entropy(self.s*output, target, weight=self.weight, ignore_index = 8)
+        return F.cross_entropy(self.s*output, target, weight=self.weight, ignore_index=8)
+
+
+def get_loss_function(config: dict, phase_weights: np.array, phases: np.array = None):
+
+    if config["function"] == 'WCE':
+        criteria = WCELoss(
+            weight=phase_weights
+        )
+    elif config["function"] == 'Focal':
+        criteria = FocalLoss(
+            weight=phase_weights,
+            alpha=config["focal_alpha"],
+            gamma=config["focal_gamma"]
+        )
+    elif config["function"] == 'LDAM':
+        criteria = LDAMLoss(
+            cls_num_list=phases,
+            max_m=config["ldam_m"],
+            s=config["ldam_s"],
+            weight=phase_weights
+        )
+
+    return criteria

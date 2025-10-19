@@ -7,6 +7,7 @@ import SurgPhaseRecog.data as data
 import SurgPhaseRecog.utils as utils
 import SurgPhaseRecog.model as model
 import SurgPhaseRecog.losses as losses
+import SurgPhaseRecog.config as config
 import SurgPhaseRecog.metrics as metrics
 
 #################################################################
@@ -100,7 +101,7 @@ def eval_epoch(surgical_model, valid_dataset, criteria, error_valid,
     metrics_valid.epoch_end(epoch, True)
 
 #################################################################
-####################### Big Run Function ########################
+######################### Fit Function ##########################
 #################################################################
 
 
@@ -133,6 +134,8 @@ def fit(args):
     syntestset = data.get_dataset(
         dataset["syntestset"], batch_size=args.batch_size)
 
+    configurator = config.SurgConfig()
+
     #########################
     ## Training Parameters ##
     #########################
@@ -155,7 +158,7 @@ def fit(args):
 
     utils.print_log('\n---{ Model }---', log_txt)
     utils.print_trainable_layers(surgical_model, log_txt)
-    
+
     ####################
     ## Loss functions ##
     ####################
@@ -163,23 +166,10 @@ def fit(args):
         syntrainset["data"],
         os.path.join(output_dir, f'results/class_dist_syn.jpg')
     ).to(device)
+    phases = data.get_phase_count(dataset["syntrainset"])
 
-    if args.loss == 'WCE':
-        criteria = losses.WCELoss(weight=phase_weights)
-    elif args.loss == 'Focal':
-        criteria = losses.FocalLoss(
-            weight=phase_weights,
-            alpha=args.focal_alpha,
-            gamma=args.focal_gamma
-        )
-    elif args.loss == 'LDAM':
-        phases = data.get_phase_count(dataset["syntrainset"])
-        criteria = losses.LDAMLoss(
-            cls_num_list=phases,
-            max_m=args.ldam_m,
-            s=args.ldam_s,
-            weight=phase_weights
-        )
+    criteria = losses.get_loss_function(
+        configurator.loss_config, phase_weights)
 
     utils.print_log('\n---{ Losses }---', log_txt)
     utils.print_log(criteria, log_txt)
@@ -520,27 +510,6 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size',
                         type=int, default=512,
                         help='number of sentences in the batch')
-
-    parser.add_argument('--loss',
-                        type=str, default='WCE',
-                        choices=['WCE', 'Focal', 'LDAM'],
-                        help='Error function')
-
-    parser.add_argument('--focal_alpha',
-                        type=float, default=0.25,
-                        help='alpha parameter of Focal Loss')
-
-    parser.add_argument('--focal_gamma',
-                        type=float, default=2,
-                        help='alpha parameter of Focal Loss')
-
-    parser.add_argument('--ldam_m',
-                        type=float, default=0.5,
-                        help='max m parameter of LDAM Loss')
-
-    parser.add_argument('--ldam_s',
-                        type=float, default=30,
-                        help='S parameter of LDAM Loss')
 
     args = parser.parse_args()
 

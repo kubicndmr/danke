@@ -15,3 +15,12 @@ class SurgConfig:
         "n_classes": 8,
         "ff_dropout": 0.3
     }
+    
+    # Loss Function
+    loss_config = {
+        "function": "WCE",
+        "focal_alpha":0.25,
+        "focal_gamma":2,
+        "ldam_m":0.5,
+        "ldam_s":30
+    }
