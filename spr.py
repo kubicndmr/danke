@@ -280,7 +280,7 @@ def fit(args):
     ###############################################################
     ####################### Start Finetuning! #####################
     ###############################################################
-    if args.n_plits:
+    if args.n_splits:
         plot_ribbon = False
         confusion_matrices = []
         results = np.zeros((args.n_splits, len(metrics_train.metric_keys)))
