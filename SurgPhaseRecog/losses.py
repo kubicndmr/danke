@@ -10,6 +10,10 @@ class WCELoss(nn.Module):
         self.weight = weight
 
     def forward(self, predict, label):
+        """
+        predict (N,C) shape
+        label (N) shape
+        """ 
         return F.cross_entropy(
             predict, label,
             weight=self.weight,

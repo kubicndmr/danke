@@ -1,8 +1,8 @@
 import os
-import utils
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
+import SurgPhaseRecog.utils as utils
 
 from sklearn.metrics import f1_score
 from sklearn.metrics import recall_score

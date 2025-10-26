@@ -3,7 +3,6 @@ import math
 import yaml
 import time
 import torch
-import shutil
 import matplotlib
 import numpy as np
 import matplotlib.pyplot as plt
@@ -56,20 +55,13 @@ def print_log(text, file_name='log.txt',
         print(text, end=ends_with, file=text_file)
 
 
-def init_log(output_dir, backup=True):
+def init_log(output_dir):
     start_time = datetime.now()
     os.makedirs(output_dir)
-    
-    if backup:
-        os.makedirs(output_dir+"code/")
-        os.makedirs(output_dir+"results/")
-        #os.makedirs(output_dir+"results/ribbons/")
-    print("Output dir-->", output_dir)
 
-    if backup:
-        for f in os.listdir("./"):
-            if f.endswith(".py"):
-                shutil.copyfile(f, output_dir+"/code/"+f)
+    os.makedirs(output_dir+"results/")
+    os.makedirs(output_dir+"results/ribbons/")
+    print("Output dir-->", output_dir)
 
     # log txt
     log_txt = os.path.join(output_dir, "log.txt")
@@ -150,8 +142,8 @@ def save_args(args, filename):
         yaml.dump(params, file, default_flow_style=False)
 
 
-def data_split(real_data_path: str, syn_data_path: str, 
-               real_dataset_size: int, syn_dataset_size: int, 
+def data_split(real_data_path: str, syn_data_path: str,
+               real_dataset_size: int, syn_dataset_size: int,
                eval_ratio: float, n_splits: int, log_txt: str):
     '''
     Splits real and synthetic datasets into training and evaluation subsets.
@@ -181,15 +173,15 @@ def data_split(real_data_path: str, syn_data_path: str,
 
     #### Synthetic Data ####
     # Check Split ratio
-    assert 0 < eval_ratio < 0.5, "Evaluation split ratio should be in [0, 0.5] range!" 
+    assert 0 < eval_ratio < 0.5, "Evaluation split ratio should be in [0, 0.5] range!"
 
     # Synthetic Dataset (For Pretraining - Classic)
-    syn_dataset = listdir(syn_data_path, '.pkl')        
-    
+    syn_dataset = listdir(syn_data_path, '.pkl')
+
     # Select all data if -1
     if syn_dataset_size == -1:
         syn_dataset_size = len(syn_dataset)
-        
+
     # Split Sets
     if syn_dataset_size <= len(syn_dataset):
         syntrainset_size = math.ceil(syn_dataset_size*(1-eval_ratio))
@@ -197,44 +189,51 @@ def data_split(real_data_path: str, syn_data_path: str,
         syntrainset = syn_dataset[:syntrainset_size]
         syntestset = syn_dataset[syntrainset_size:syntrainset_size+syn_evalset_size]
     else:
-        raise ValueError(f"[SYN] You asked {syn_dataset_size} OPs, but the '{syn_data_path}' has {len(syn_dataset)} OPs instead")
-    
+        raise ValueError(
+            f"[SYN] You asked {syn_dataset_size} OPs, but the '{syn_data_path}' has {len(syn_dataset)} OPs instead")
+
     #### Real Data ####
     # Check n_splits
-    assert 1 < n_splits < 6, "Folds should be in [2, 5] range!" 
-    
+    assert n_splits is None or 1 < n_splits < 6, "Folds should be in [2, 5] range!"
+
     # Real Dataset (For Finetuning - k-Fold)
     real_dataset = listdir(real_data_path, '.pkl')
 
     # Select all data if -1
     if real_dataset_size == -1:
         real_dataset_size = len(real_dataset)
-    
+
     if real_dataset_size > len(real_dataset):
-        raise ValueError(f"[Real] You asked {real_dataset_size} OPs, but the '{real_data_path}' has {len(real_dataset)} OPs instead")
-    
+        raise ValueError(
+            f"[Real] You asked {real_dataset_size} OPs, but the '{real_data_path}' has {len(real_dataset)} OPs instead")
+
     realtrainsets = []
     realtestsets = []
-    
-    kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
-    for train, test in kf.split(real_dataset[:real_dataset_size]):
-        realtrainsets.append([real_dataset[i] for i in train])
-        realtestsets.append([real_dataset[i] for i in test])
-    
+
+    if n_splits:
+        kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
+        for train, test in kf.split(real_dataset[:real_dataset_size]):
+            realtrainsets.append([real_dataset[i] for i in train])
+            realtestsets.append([real_dataset[i] for i in test])
+
     #### Log ####
     print_log('\n---{ Synthetic Data }---', log_txt)
     print_log("Trainset [{}] OPs\t: {}".format(len(syntrainset),
-                                                         syntrainset), log_txt)
-    print_log("Testset [{}] OPs\t: {}".format(len(syntestset), 
-                                                        syntestset), log_txt)
-    
+                                               syntrainset), log_txt)
+    print_log("Testset [{}] OPs\t: {}".format(len(syntestset),
+                                              syntestset), log_txt)
+
     print_log('\n---{ Real Data }---', log_txt)
-    for i in range(n_splits):
-        print_log("Fold {}| Trainset [{}] OPs\t: {}".format(i+1, len(realtrainsets[i]),
-                                                                      realtrainsets[i]), log_txt)
-        print_log("Fold {}| Testset [{}] OPs\t: {}".format(i+1, len(realtestsets[i]),
-                                                                     realtestsets[i]), log_txt)
-            
+    if n_splits:
+        for i in range(n_splits):
+            print_log("Fold {}| Trainset [{}] OPs\t: {}".format(i+1, len(realtrainsets[i]),
+                                                                realtrainsets[i]), log_txt)
+            print_log("Fold {}| Testset [{}] OPs\t: {}".format(i+1, len(realtestsets[i]),
+                                                               realtestsets[i]), log_txt)
+    else:
+        print_log("Trainset [0] OPs\t: []", log_txt)
+        print_log("Testset [0] OPs\t: []", log_txt)
+
     return {'syntrainset': syntrainset,
             'syntestset': syntestset,
             'realtrainsets': realtrainsets,
@@ -373,7 +372,7 @@ def phase_weights(dataset, save_path=None):
     else:
         phase_count = np.zeros(8, dtype=int)
         for d in dataset:
-            phase_count += d.dataset.phase_count()
+            phase_count += d.dataset.phase_count
 
         beta = 0.9999
         effective_num = 1.0 - np.power(beta, phase_count)
@@ -385,7 +384,7 @@ def phase_weights(dataset, save_path=None):
         if save_path != None:
             percentage_count = np.zeros((len(dataset), 8))
             for i, d in enumerate(dataset):
-                count = d.dataset.phase_count()
+                count = d.dataset.phase_count
                 percentage_count[i, :] = count / np.sum(count)
 
             def_cmap = plt.cm.get_cmap('tab10')
@@ -393,9 +392,9 @@ def phase_weights(dataset, save_path=None):
 
             plt.figure(dpi=FIG_DPI)
             boxplots = plt.boxplot(percentage_count,
-                                patch_artist=True,
-                                medianprops=dict(color='black')
-                                )
+                                   patch_artist=True,
+                                   medianprops=dict(color='black')
+                                   )
             for patch, color in zip(boxplots['boxes'], color_list):
                 patch.set_facecolor(color)
 
@@ -440,15 +439,16 @@ def compute_run_means(results_array):
     non_zero_counts[non_zero_counts == 0] = 1
     return non_zero_sum / non_zero_counts
 
+
 def plot_confusion_matrix(confusion_matrices, output_path):
-    
+
     sum_cm = np.zeros((8, 8))
     for cm in confusion_matrices:
         sum_cm += cm
-    
+
     # Normalize
     sum_cm = sum_cm / sum_cm.sum(axis=1, keepdims=True)
-    
+
     # Plot confusion matrix
     plt.figure(dpi=600, constrained_layout=True)
     plt.imshow(sum_cm, cmap='Blues')
@@ -456,39 +456,43 @@ def plot_confusion_matrix(confusion_matrices, output_path):
     plt.yticks(ticks=range(8), labels=range(8))
     plt.ylabel('True Phases', fontsize=20)
     plt.xlabel('Predicted Phases', fontsize=20)
-    plt.savefig(f'{output_path}results/confusion_matrix.png', bbox_inches='tight')
+    plt.savefig(f'{output_path}results/confusion_matrix.png',
+                bbox_inches='tight')
     plt.close()
 
 
-def output_dir(args):
-    if args.loss == 'WCE':
+def output_dir(args, config):
+    if not os.path.exists("logs"):
+        os.mkdir("logs")
+
+    if config.loss_config["function"] == 'WCE':
         output_dir = (
             f"logs/K[{args.n_splits}]Fold_nops[{args.syn_dataset_size}-{args.real_dataset_size}]_"
-            f"loss[{args.loss}]_wd[{args.weight_decay}]_lr[{args.learning_rate}]_mdrop[{args.model_dropout}]_"
-            f"sdrop[{args.sentence_dropout}]_dim[{args.model_dim}]/"
+            f"loss[{config.loss_config['function']}]_wd[{config.params['weight_decay']}]_"
+            f"lr[{config.params['lr']}]/"
         )
-    elif args.loss == 'Focal':
+    elif config.loss_config["function"] == 'Focal':
         output_dir = (
             f"logs/K[{args.n_splits}]Fold_nops[{args.syn_dataset_size}-{args.real_dataset_size}]_"
-            f"loss[{args.loss}]_alpha[{args.focal_alpha}]_gamma[{args.focal_gamma}]_"
-            f"wd[{args.weight_decay}]_lr[{args.learning_rate}]_mdrop[{args.model_dropout}]_"
-            f"sdrop[{args.sentence_dropout}]_dim[{args.model_dim}]/"
+            f"loss[{config.loss_config['function']}]_alpha[{config.loss_config['focal_alpha']}]_"
+            f"gamma[{config.loss_config['focal_gamma']}]_wd[{config.params['weight_decay']}]_"
+            f"lr[{config.params['lr']}]/"
         )
-    elif args.loss == 'LDAM':
+    elif config.loss_config["function"] == 'LDAM':
         output_dir = (
             f"logs/K[{args.n_splits}]Fold_nops[{args.syn_dataset_size}-{args.real_dataset_size}]_"
-            f"loss[{args.loss}]_m[{args.ldam_m}]_s[{args.ldam_s}]_"
-            f"wd[{args.weight_decay}]_lr[{args.learning_rate}]_mdrop[{args.model_dropout}]_"
-            f"sdrop[{args.sentence_dropout}]_dim[{args.model_dim}]/"
+            f"loss[{config.loss_config['function']}]_m[{config.params['ldam_m']}]_"
+            f"s[{config.params['ldam_s']}]_wd[{config.params['weight_decay']}]_"
+            f"lr[{config.params['lr']}]/"
         )
-        
+
     return output_dir
 
 
 def print_trainable_layers(model, log_txt):
     total_params = 0
     trainable_params = 0
-    
+
     print_log("\n=== Model Trainable Status ===", log_txt)
     for name, param in model.named_parameters():
         num_params = param.numel()
@@ -502,5 +506,6 @@ def print_trainable_layers(model, log_txt):
     print_log("==============================\n", log_txt)
     print_log(f"Total parameters:      {total_params:,}", log_txt)
     print_log(f"Trainable parameters:  {trainable_params:,}", log_txt)
-    print_log(f"Frozen parameters:     {total_params - trainable_params:,}", log_txt)
+    print_log(
+        f"Frozen parameters:     {total_params - trainable_params:,}", log_txt)
     print_log("==========================================\n", log_txt)

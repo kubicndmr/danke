@@ -1,4 +1,11 @@
 class SurgConfig:
+    # Dataset
+    dataset_config = {
+        "llm":"bert",
+        "model_name":"bert-base-uncased",
+        "batch_size" : 512,
+    }
+    
     # Text Encoder BERT
     embedder_config = {
         "llm":"bert",
@@ -24,3 +31,17 @@ class SurgConfig:
         "ldam_m":0.5,
         "ldam_s":30
     }
+    
+    # Training parameters
+    params = {
+        "lr":1e-4,
+        "weight_decay":1e-5,
+        "batch_size":512,
+        "patience_limit": 5,
+        "epochs_limit": 500,
+        "delta_escb": 0,
+    }
+    
+    # Checks
+    assert dataset_config["llm"] == embedder_config["llm"], "different llms are given"
+    assert dataset_config["model_name"] == embedder_config["model_name"], "different models are given"

@@ -1,6 +1,5 @@
-import torch
 from torch import nn
-from transformers import BertTokenizer, BertModel
+from transformers import BertModel
 
 class TextEncoder(nn.Module):
     def __init__(self, config: dict):
@@ -8,7 +7,6 @@ class TextEncoder(nn.Module):
 
         if config["llm"] == "bert":
             self.llm = BertModel.from_pretrained(config["model_name"]) 
-            self.tokenizer = BertTokenizer.from_pretrained(config["model_name"])
         else:
             NotImplementedError
             
@@ -95,7 +93,7 @@ class SLPNet(nn.Module):
         # Classifier
         self.classifier = TextClassifier(config.classifier_config)
 
-    def forward(self, x):
-        x = self.text_encoder(x)
-        x = self.classifier(x)
-        return x
+    def forward(self, x, attmask):
+        x = self.text_encoder(x, attmask)
+        x = self.classifier(x.T)
+        return x.T

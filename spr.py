@@ -21,21 +21,23 @@ def train_epoch(surgical_model, optimizer, train_dataset, criteria,
     surgical_model.train()
     for data_loader in train_dataset['data']:
         # OP-wise iter
-        for _, embed_, label_ in data_loader:
+        for token_ids, att_mask, label in data_loader:
+
             # Data
-            embed_ = embed_.clone().detach().float().to(device).unsqueeze(-1)
-            label_ = label_.clone().detach().long().to(device).squeeze()
+            token_ids = token_ids.clone().detach().to(device)
+            att_mask = att_mask.clone().detach().to(device)
+            label = label.clone().detach().long().to(device)
 
             # Model
             optimizer.zero_grad(set_to_none=True)
-            predict_ = surgical_model(embed_)
+            predicted = surgical_model(token_ids, att_mask)
 
             # Loss
-            error = criteria(predict_, label_)
+            error = criteria(predicted, label)
             error_train[epoch] += error.clone().detach()
 
             # Metrics
-            metrics_train.batch(label_, predict_)
+            metrics_train.batch(label, predicted)
 
             # BP
             error.backward()
@@ -55,7 +57,7 @@ def train_epoch(surgical_model, optimizer, train_dataset, criteria,
 
     # Print Metrics
     utils.print_log(
-        f"""\tLoss [{args.loss}]\t: {error_train[epoch].item():.5f}""",
+        f"""\tLoss\t: {error_train[epoch].item():.5f}""",
         log_txt, display=True)
     utils.print_log(
         f"\tLearning Rate\t: {optimizer.param_groups[0]['lr']}", log_txt, display=True)
@@ -70,21 +72,22 @@ def eval_epoch(surgical_model, valid_dataset, criteria, error_valid,
     surgical_model.eval()
     for data_loader in valid_dataset['data']:
         # OP-wise iter
-        for _, embed_, label_ in data_loader:
+        for token_ids, att_mask, label in data_loader:
             # Data
-            embed_ = embed_.clone().detach().float().to(device).unsqueeze(-1)
-            label_ = label_.clone().detach().long().to(device).squeeze()
+            token_ids = token_ids.clone().detach().to(device)
+            att_mask = att_mask.clone().detach().to(device)
+            label = label.clone().detach().long().to(device)
 
             # Model
             with torch.no_grad():
-                predict_ = surgical_model(embed_)
+                predicted = surgical_model(token_ids, att_mask)
 
             # Loss
-            error_ce = criteria(predict_, label_)
+            error_ce = criteria(predicted, label)
             error_valid[epoch] += error_ce.clone().detach()
 
             # Metrics
-            metrics_valid.batch(label_, predict_)
+            metrics_valid.batch(label, predicted)
 
         # Log OP
         metrics_valid.op_end(data_loader.dataset.op_name, plot_ribbon)
@@ -94,7 +97,7 @@ def eval_epoch(surgical_model, valid_dataset, criteria, error_valid,
 
     # Print Metrics
     utils.print_log(
-        f"""\tLoss [{args.loss}]\t: {error_valid[epoch].item():.5f}""",
+        f"""\tLoss\t: {error_valid[epoch].item():.5f}""",
         log_txt, display=True)
 
     # Metrics Log
@@ -109,7 +112,9 @@ def fit(args):
     ####################
     ## Data and Paths ##
     ####################
-    output_dir = utils.output_dir(args)
+    configurator = config.SurgConfig()
+
+    output_dir = utils.output_dir(args, configurator)
     wandb.run.name = output_dir[len("logs/"):]
 
     log_txt = utils.init_log(output_dir)
@@ -130,31 +135,15 @@ def fit(args):
     )
 
     syntrainset = data.get_dataset(
-        dataset["syntrainset"], batch_size=args.batch_size)
+        dataset["syntrainset"], configurator.dataset_config)
     syntestset = data.get_dataset(
-        dataset["syntestset"], batch_size=args.batch_size)
-
-    configurator = config.SurgConfig()
-
-    #########################
-    ## Training Parameters ##
-    #########################
-    params = {
-        "patience_limit": 5,
-        "epochs_limit": 500,
-        "delta_escb": 0,
-    }
+        dataset["syntestset"], configurator.dataset_config)
 
     ####################
     ## Surgical Model ##
     ####################
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    surgical_model = model.SLPNet(
-        model_dim=args.model_dim,
-        num_classes=8,
-        sentence_dropout=args.sentence_dropout,
-        model_dropout=args.model_dropout
-    ).to(device)
+    surgical_model = model.SLPNet(config=configurator).to(device)
 
     utils.print_log('\n---{ Model }---', log_txt)
     utils.print_trainable_layers(surgical_model, log_txt)
@@ -166,10 +155,10 @@ def fit(args):
         syntrainset["data"],
         os.path.join(output_dir, f'results/class_dist_syn.jpg')
     ).to(device)
-    phases = data.get_phase_count(dataset["syntrainset"])
+    phase_counts = syntrainset['phase_counts']
 
     criteria = losses.get_loss_function(
-        configurator.loss_config, phase_weights)
+        configurator.loss_config, phase_weights, phase_counts)
 
     utils.print_log('\n---{ Losses }---', log_txt)
     utils.print_log(criteria, log_txt)
@@ -180,8 +169,8 @@ def fit(args):
     ###############
     optimizer = torch.optim.Adam(
         surgical_model.parameters(),
-        lr=args.learning_rate,
-        weight_decay=args.weight_decay
+        lr=configurator.params["lr"],
+        weight_decay=configurator.params["weight_decay"]
     )
 
     utils.print_log('\n---{ Optimizer }---', log_txt)
@@ -194,7 +183,7 @@ def fit(args):
         optimizer,
         mode='min',
         factor=0.5,
-        patience=params['patience_limit'],
+        patience=configurator.params['patience_limit'],
         min_lr=0
     )
 
@@ -205,11 +194,11 @@ def fit(args):
     ## Metrics ##
     #############
     metrics_train = metrics.SPRMetrics(
-        log_txt, output_dir, params['epochs_limit'])
-    error_train = torch.zeros(params['epochs_limit']).to(device)
+        log_txt, output_dir, configurator.params['epochs_limit'])
+    error_train = torch.zeros(configurator.params['epochs_limit']).to(device)
     metrics_valid = metrics.SPRMetrics(
-        log_txt, output_dir, params['epochs_limit'])
-    error_valid = torch.zeros(params['epochs_limit']).to(device)
+        log_txt, output_dir, configurator.params['epochs_limit'])
+    error_valid = torch.zeros(configurator.params['epochs_limit']).to(device)
 
     ###############################################################
     ###################### Start Pretraining! #####################
@@ -222,7 +211,7 @@ def fit(args):
     early_stopper_flag = False
 
     utils.print_log('\n---{ Training }---', log_txt)
-    while ((epoch < params['epochs_limit']) and (early_stopper_flag == False)
+    while ((epoch < configurator.params['epochs_limit']) and (early_stopper_flag == False)
            and (syntrainset['batch_size'] != 0)):
         # Train
         utils.print_log(f'\nEpoch [train]: {epoch}', log_txt, display=True)
@@ -264,9 +253,9 @@ def fit(args):
         else:
             patience += 1
 
-        if patience < params['patience_limit']:
+        if patience < configurator.params['patience_limit']:
             utils.print_log(
-                f'\tPatience\t: {patience}/{params["patience_limit"]} ({last_error:.3f}/{best_error:.3f})',
+                f'\tPatience\t: {patience}/{configurator.params["patience_limit"]} ({last_error:.3f}/{best_error:.3f})',
                 log_txt, display=True)
         else:
             early_stopper_flag = True
@@ -305,9 +294,9 @@ def fit(args):
         ## Data ##
         ##########
         realtrainset = data.get_dataset(
-            dataset["realtrainsets"][fold], batch_size=args.batch_size)
+            dataset["realtrainsets"][fold], batch_size=configurator.params["batch_size"])
         realtestset = data.get_dataset(
-            dataset["realtestsets"][fold], batch_size=args.batch_size)
+            dataset["realtestsets"][fold], batch_size=configurator.params["batch_size"])
         assert not set(dataset["realtrainsets"][fold]).intersection(
             dataset["realtestsets"][fold])
 
@@ -333,22 +322,8 @@ def fit(args):
                 output_dir, f'results/class_dist_fold{fold+1}_train.jpg')
         ).to(device)
 
-        if args.loss == 'WCE':
-            criteria = losses.WCELoss(weight=phase_weights)
-        elif args.loss == 'Focal':
-            criteria = losses.FocalLoss(
-                weight=phase_weights,
-                alpha=args.focal_alpha,
-                gamma=args.focal_gamma
-            )
-        elif args.loss == 'LDAM':
-            phases = data.get_phase_count(dataset["syntrainset"])
-            criteria = losses.LDAMLoss(
-                cls_num_list=phases,
-                max_m=args.ldam_m,
-                s=args.ldam_s,
-                weight=phase_weights
-            )
+        criteria = losses.get_loss_function(
+            configurator.loss_config, phase_weights)
 
         utils.print_log('\n---{ Losses }---', log_txt)
         utils.print_log(criteria, log_txt)
@@ -359,8 +334,8 @@ def fit(args):
         ###############
         optimizer = torch.optim.Adam(
             surgical_model.parameters(),
-            lr=args.learning_rate * 0.1,
-            weight_decay=args.weight_decay
+            lr=configurator.params["lr"]*0.1,
+            weight_decay=configurator.params["weight_decay"]*0.1
         )
 
         utils.print_log('\n---{ Optimizer }---', log_txt)
@@ -370,18 +345,20 @@ def fit(args):
         ## Metrics ##
         #############
         metrics_train_ft = metrics.SPRMetrics(
-            log_txt, output_dir, params['epochs_limit'])
-        error_train_ft = torch.zeros(params['epochs_limit']).to(device)
+            log_txt, output_dir, configurator.params['epochs_limit'])
+        error_train_ft = torch.zeros(
+            configurator.params['epochs_limit']).to(device)
         metrics_valid_ft = metrics.SPRMetrics(
-            log_txt, output_dir, params['epochs_limit'])
-        error_valid_ft = torch.zeros(params['epochs_limit']).to(device)
+            log_txt, output_dir, configurator.params['epochs_limit'])
+        error_valid_ft = torch.zeros(
+            configurator.params['epochs_limit']).to(device)
 
         epoch = 0
         patience = 0
         best_error = 0
         early_stopper_flag = False
 
-        while (epoch < params['epochs_limit']) and (early_stopper_flag == False):
+        while (epoch < configurator.params['epochs_limit']) and (early_stopper_flag == False):
             # Train
             utils.print_log(f'\nEpoch [train]: {epoch}', log_txt, display=True)
             train_epoch(surgical_model,
@@ -421,9 +398,9 @@ def fit(args):
             else:
                 patience += 1
 
-            if patience < params['patience_limit']:
+            if patience < configurator.params['patience_limit']:
                 utils.print_log(
-                    f'\tPatience\t: {patience}/{params["patience_limit"]} ({last_error:.3f}/{best_error:.3f})',
+                    f'\tPatience\t: {patience}/{configurator.params["patience_limit"]} ({last_error:.3f}/{best_error:.3f})',
                     log_txt, display=True)
             else:
                 early_stopper_flag = True
@@ -475,14 +452,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description="Train a network for SPR")
 
-    parser.add_argument('--learning_rate',
-                        type=float,
-                        help='initial learning rate for optimizer')
-
-    parser.add_argument('--weight_decay',
-                        type=float,
-                        help='regularizer of the optimizer')
-
     parser.add_argument('--real_data_path',
                         type=str, default="/DATA/kubi/Dataset/PoCaP-large-v3/",
                         help='path to real dataset')
@@ -504,12 +473,8 @@ if __name__ == '__main__':
                         help='portion of the dataset used for testing')
 
     parser.add_argument('--n_splits',
-                        type=int, default=4,
+                        type=int, default=None,
                         help='number of folds')
-
-    parser.add_argument('--batch_size',
-                        type=int, default=512,
-                        help='number of sentences in the batch')
 
     args = parser.parse_args()
 
