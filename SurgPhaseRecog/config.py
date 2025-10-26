@@ -1,15 +1,15 @@
 class SurgConfig:
     # Dataset
     dataset_config = {
-        "llm":"bert",
-        "model_name":"bert-base-uncased",
+        "llm":"e5-large",
+        "model_name":"intfloat/multilingual-e5-large",
         "batch_size" : 512,
     }
     
     # Text Encoder BERT
     embedder_config = {
-        "llm":"bert",
-        "model_name":"bert-base-uncased",
+        "llm":"e5-large",
+        "model_name":"intfloat/multilingual-e5-large",
         "freeze" : True,
         "freeze_layers": 10,
     }
@@ -17,7 +17,7 @@ class SurgConfig:
     # Classifier
     classifier_config = {
         "head": "single_layer",
-        "input_dim": 768, 
+        "input_dim": 1024, 
         "model_dim": 1024,
         "n_classes": 8,
         "ff_dropout": 0.3

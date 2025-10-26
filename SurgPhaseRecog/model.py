@@ -1,15 +1,24 @@
+import torch.nn.functional as F
+
 from torch import nn
+from torch import Tensor
 from transformers import BertModel
+from transformers import AutoModel
+
 
 class TextEncoder(nn.Module):
     def __init__(self, config: dict):
         super().__init__()
 
+        self.config = config
+
         if config["llm"] == "bert":
-            self.llm = BertModel.from_pretrained(config["model_name"]) 
+            self.llm = BertModel.from_pretrained(config["model_name"])
+        elif config["llm"] == "e5-large":
+            self.llm = AutoModel.from_pretrained(config["model_name"])
         else:
             NotImplementedError
-            
+
         if config["freeze"]:
             assert config["freeze_layers"] > 0 and config["freeze_layers"] <= 10, "Can freeze up to 10 blocks"
             for name, param in self.llm.named_parameters():
@@ -17,16 +26,26 @@ class TextEncoder(nn.Module):
                     param.requires_grad = False
                 if any(f"encoder.layer.{i}" in name for i in range(config["freeze_layers"])):
                     param.requires_grad = False
-            
+
+    def average_pool(self, last_hidden_states: Tensor, attention_mask: Tensor) -> Tensor:
+        last_hidden = last_hidden_states.masked_fill(
+            ~attention_mask[..., None].bool(), 0.0)
+        return last_hidden.sum(dim=1) / attention_mask.sum(dim=1)[..., None]
+
     def forward(self, input_ids, attention_mask):
-            output = self.llm(input_ids=input_ids, attention_mask=attention_mask)
+        output = self.llm(input_ids=input_ids, attention_mask=attention_mask)
+        if self.config["llm"] == "bert":
             return output.pooler_output
-            
+        elif self.config["llm"] == "e5-large":
+            embeddings = self.average_pool(
+                output.last_hidden_state, attention_mask)
+            return F.normalize(embeddings, p=2, dim=1)
+
 
 class TextClassifier(nn.Module):
     def __init__(self, config: dict):
         super().__init__()
-        
+
         if config["head"] == "single_layer":
             self.classifier = nn.Sequential(
                 nn.Dropout(p=config["ff_dropout"]),
@@ -36,7 +55,7 @@ class TextClassifier(nn.Module):
                     kernel_size=1,
                 )
             )
-            
+
         elif config["head"] == "double_layers":
             self.classifier = nn.Sequential(
                 nn.Conv1d(
@@ -53,7 +72,7 @@ class TextClassifier(nn.Module):
                     kernel_size=1,
                 ),
             )
-            
+
         elif config["head"] == "temporal":
             self.classifier = nn.Sequential(
                 nn.Conv1d(
@@ -73,10 +92,10 @@ class TextClassifier(nn.Module):
                     kernel_size=1,
                 ),
             )
-            
+
         else:
             raise NotImplementedError
-        
+
     def forward(self, x):
         return self.classifier(x)
 

@@ -2,6 +2,7 @@ import torch
 import numpy as np
 import pandas as pd
 
+from transformers import AutoTokenizer
 from transformers import BertTokenizer
 from torch.utils.data import Dataset, DataLoader
 
@@ -9,17 +10,21 @@ from torch.utils.data import Dataset, DataLoader
 class SPRDataset(Dataset):
     def __init__(self, data_path, config):
         # Data path
+        self.config = config
         self.data_path = data_path
         self.op_name = data_path.split('/')[-1][:-4]
-        
+
         # Tokenizer
         if config["llm"] == "bert":
             self.tokenizer = BertTokenizer.from_pretrained(
                 config["model_name"])
+        elif config["llm"] == "e5-large":
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                config["model_name"])
         else:
             raise NotImplementedError
-
-        # Get data
+        
+        # Extract data
         self.get_data(data_path, config["batch_size"])
 
     def __len__(self):
@@ -38,6 +43,10 @@ class SPRDataset(Dataset):
 
         # Remove transition label
         df = df[df['Phase_Label'] != 8].reset_index(drop=True)
+
+        # Add query
+        if self.config['llm'] == 'e5-large':
+            df['Text'] = df['Text'].apply(lambda x: 'query: ' + x)
 
         # If batch size is 1, remove last sample
         if len(df) % batch_size == 1:
