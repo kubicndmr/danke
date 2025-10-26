@@ -280,168 +280,169 @@ def fit(args):
     ###############################################################
     ####################### Start Finetuning! #####################
     ###############################################################
-    plot_ribbon = False
-    confusion_matrices = []
-    results = np.zeros((args.n_splits, len(metrics_train.metric_keys)))
+    if args.n_plits:
+        plot_ribbon = False
+        confusion_matrices = []
+        results = np.zeros((args.n_splits, len(metrics_train.metric_keys)))
 
-    ######################
-    ## K-Fold Iteration ##
-    ######################
-    for fold in range(args.n_splits):
-        utils.print_log(f"\n---{{ Finetuning {fold+1}th-Fold }}---", log_txt)
+        ######################
+        ## K-Fold Iteration ##
+        ######################
+        for fold in range(args.n_splits):
+            utils.print_log(f"\n---{{ Finetuning {fold+1}th-Fold }}---", log_txt)
 
-        ##########
-        ## Data ##
-        ##########
-        realtrainset = data.get_dataset(
-            dataset["realtrainsets"][fold], batch_size=configurator.params["batch_size"])
-        realtestset = data.get_dataset(
-            dataset["realtestsets"][fold], batch_size=configurator.params["batch_size"])
-        assert not set(dataset["realtrainsets"][fold]).intersection(
-            dataset["realtestsets"][fold])
+            ##########
+            ## Data ##
+            ##########
+            realtrainset = data.get_dataset(
+                dataset["realtrainsets"][fold], batch_size=configurator.params["batch_size"])
+            realtestset = data.get_dataset(
+                dataset["realtestsets"][fold], batch_size=configurator.params["batch_size"])
+            assert not set(dataset["realtrainsets"][fold]).intersection(
+                dataset["realtestsets"][fold])
 
-        ###############
-        #### Model ####
-        ###############
-        surgical_model = model.SLPNet(
-            model_dim=args.model_dim,
-            num_classes=8,
-            sentence_dropout=args.sentence_dropout,
-            model_dropout=args.model_dropout
-        ).to(device)
-        if best_model_state is not None:
-            surgical_model.load_state_dict(best_model_state)
-            utils.print_log("Best pretrained model reloaded!", log_txt)
+            ###############
+            #### Model ####
+            ###############
+            surgical_model = model.SLPNet(
+                model_dim=args.model_dim,
+                num_classes=8,
+                sentence_dropout=args.sentence_dropout,
+                model_dropout=args.model_dropout
+            ).to(device)
+            if best_model_state is not None:
+                surgical_model.load_state_dict(best_model_state)
+                utils.print_log("Best pretrained model reloaded!", log_txt)
 
-        ####################
-        ## Loss functions ##
-        ####################
-        phase_weights = utils.phase_weights(
-            realtrainset["data"],
-            os.path.join(
-                output_dir, f'results/class_dist_fold{fold+1}_train.jpg')
-        ).to(device)
+            ####################
+            ## Loss functions ##
+            ####################
+            phase_weights = utils.phase_weights(
+                realtrainset["data"],
+                os.path.join(
+                    output_dir, f'results/class_dist_fold{fold+1}_train.jpg')
+            ).to(device)
 
-        criteria = losses.get_loss_function(
-            configurator.loss_config, phase_weights)
+            criteria = losses.get_loss_function(
+                configurator.loss_config, phase_weights)
 
-        utils.print_log('\n---{ Losses }---', log_txt)
-        utils.print_log(criteria, log_txt)
-        utils.print_log(f"Phase Weights: \n\t{phase_weights}", log_txt)
+            utils.print_log('\n---{ Losses }---', log_txt)
+            utils.print_log(criteria, log_txt)
+            utils.print_log(f"Phase Weights: \n\t{phase_weights}", log_txt)
 
-        ###############
-        ## Optimizer ##
-        ###############
-        optimizer = torch.optim.Adam(
-            surgical_model.parameters(),
-            lr=configurator.params["lr"]*0.1,
-            weight_decay=configurator.params["weight_decay"]*0.1
-        )
+            ###############
+            ## Optimizer ##
+            ###############
+            optimizer = torch.optim.Adam(
+                surgical_model.parameters(),
+                lr=configurator.params["lr"]*0.1,
+                weight_decay=configurator.params["weight_decay"]*0.1
+            )
 
-        utils.print_log('\n---{ Optimizer }---', log_txt)
-        utils.print_log(optimizer, log_txt)
+            utils.print_log('\n---{ Optimizer }---', log_txt)
+            utils.print_log(optimizer, log_txt)
 
-        #############
-        ## Metrics ##
-        #############
-        metrics_train_ft = metrics.SPRMetrics(
-            log_txt, output_dir, configurator.params['epochs_limit'])
-        error_train_ft = torch.zeros(
-            configurator.params['epochs_limit']).to(device)
-        metrics_valid_ft = metrics.SPRMetrics(
-            log_txt, output_dir, configurator.params['epochs_limit'])
-        error_valid_ft = torch.zeros(
-            configurator.params['epochs_limit']).to(device)
+            #############
+            ## Metrics ##
+            #############
+            metrics_train_ft = metrics.SPRMetrics(
+                log_txt, output_dir, configurator.params['epochs_limit'])
+            error_train_ft = torch.zeros(
+                configurator.params['epochs_limit']).to(device)
+            metrics_valid_ft = metrics.SPRMetrics(
+                log_txt, output_dir, configurator.params['epochs_limit'])
+            error_valid_ft = torch.zeros(
+                configurator.params['epochs_limit']).to(device)
 
-        epoch = 0
-        patience = 0
-        best_error = 0
-        early_stopper_flag = False
+            epoch = 0
+            patience = 0
+            best_error = 0
+            early_stopper_flag = False
 
-        while (epoch < configurator.params['epochs_limit']) and (early_stopper_flag == False):
-            # Train
-            utils.print_log(f'\nEpoch [train]: {epoch}', log_txt, display=True)
-            train_epoch(surgical_model,
-                        optimizer,
-                        realtrainset,
+            while (epoch < configurator.params['epochs_limit']) and (early_stopper_flag == False):
+                # Train
+                utils.print_log(f'\nEpoch [train]: {epoch}', log_txt, display=True)
+                train_epoch(surgical_model,
+                            optimizer,
+                            realtrainset,
+                            criteria,
+                            error_train_ft,
+                            metrics_train_ft,
+                            epoch,
+                            device,
+                            log_txt
+                            )
+
+                # Validation
+                utils.print_log(f'\nEpoch [valid]: {epoch}', log_txt, display=True)
+                eval_epoch(surgical_model,
+                        realtestset,
                         criteria,
-                        error_train_ft,
-                        metrics_train_ft,
+                        error_valid_ft,
+                        metrics_valid_ft,
                         epoch,
                         device,
-                        log_txt
+                        log_txt,
+                        plot_ribbon
                         )
 
-            # Validation
-            utils.print_log(f'\nEpoch [valid]: {epoch}', log_txt, display=True)
-            eval_epoch(surgical_model,
-                       realtestset,
-                       criteria,
-                       error_valid_ft,
-                       metrics_valid_ft,
-                       epoch,
-                       device,
-                       log_txt,
-                       plot_ribbon
-                       )
-
-            # Scheduler
-            last_error = error_valid_ft[epoch].item()
-            scheduler.step(last_error)
-            utils.print_log(
-                f'\tLearning Rate\t: {scheduler.get_last_lr()}', log_txt, display=True)
-
-            # Loss Check
-            if last_error > best_error:
-                patience = 0
-                best_error = last_error
-            else:
-                patience += 1
-
-            if patience < configurator.params['patience_limit']:
+                # Scheduler
+                last_error = error_valid_ft[epoch].item()
+                scheduler.step(last_error)
                 utils.print_log(
-                    f'\tPatience\t: {patience}/{configurator.params["patience_limit"]} ({last_error:.3f}/{best_error:.3f})',
-                    log_txt, display=True)
-            else:
-                early_stopper_flag = True
+                    f'\tLearning Rate\t: {scheduler.get_last_lr()}', log_txt, display=True)
 
-            # Increment
-            epoch += 1
+                # Loss Check
+                if last_error > best_error:
+                    patience = 0
+                    best_error = last_error
+                else:
+                    patience += 1
 
-        #######################################
-        ## Plot final error/metric functions ##
-        #######################################
-        metrics_train_ft.eval_end(f"finetune_{fold+1}_train")
-        results[fold, :], confusion_matrices_fold = metrics_valid_ft.eval_end(
-            f"finetune_{fold+1}_validation")
-        confusion_matrices.extend(confusion_matrices_fold)
+                if patience < configurator.params['patience_limit']:
+                    utils.print_log(
+                        f'\tPatience\t: {patience}/{configurator.params["patience_limit"]} ({last_error:.3f}/{best_error:.3f})',
+                        log_txt, display=True)
+                else:
+                    early_stopper_flag = True
 
-        utils.plot_error(error_train_ft,
-                         error_valid_ft,
-                         output_dir,
-                         f"finetune_{fold+1}_"
-                         )
+                # Increment
+                epoch += 1
 
-    # Log Average Results
-    utils.plot_confusion_matrix(confusion_matrices, output_dir)
+            #######################################
+            ## Plot final error/metric functions ##
+            #######################################
+            metrics_train_ft.eval_end(f"finetune_{fold+1}_train")
+            results[fold, :], confusion_matrices_fold = metrics_valid_ft.eval_end(
+                f"finetune_{fold+1}_validation")
+            confusion_matrices.extend(confusion_matrices_fold)
 
-    results_std = np.std(results, axis=0)
-    results_mean = np.mean(results, axis=0)
-    for idx, metric in enumerate(metrics_valid_ft.metric_keys):
-        utils.print_log(f"[Average {metric}]\t: {results_mean[idx]:.5f} +- {results_std[idx]:.5f}",
-                        log_txt,
-                        display=True)
-        wandb.log({metric: results_mean[idx]})
+            utils.plot_error(error_train_ft,
+                            error_valid_ft,
+                            output_dir,
+                            f"finetune_{fold+1}_"
+                            )
 
-    ################
-    ## Save model ##
-    ################
-    """
-    torch.save({
-        'model_state_dict': surgical_model.state_dict(),
-        'optimizer_state_dict': optimizer.state_dict()
-    }, output_dir + 'checkpoint.ckp')
-    """
+        # Log Average Results
+        utils.plot_confusion_matrix(confusion_matrices, output_dir)
+
+        results_std = np.std(results, axis=0)
+        results_mean = np.mean(results, axis=0)
+        for idx, metric in enumerate(metrics_valid_ft.metric_keys):
+            utils.print_log(f"[Average {metric}]\t: {results_mean[idx]:.5f} +- {results_std[idx]:.5f}",
+                            log_txt,
+                            display=True)
+            wandb.log({metric: results_mean[idx]})
+
+        ################
+        ## Save model ##
+        ################
+        """
+        torch.save({
+            'model_state_dict': surgical_model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict()
+        }, output_dir + 'checkpoint.ckp')
+        """
 
 
 #################################################################
