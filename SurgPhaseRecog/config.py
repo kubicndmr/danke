@@ -3,7 +3,7 @@ class SurgConfig:
     dataset_config = {
         "llm":"e5-large",
         "model_name":"intfloat/multilingual-e5-large",
-        "batch_size" : 512,
+        "batch_size" : 32,
     }
     
     # Text Encoder BERT

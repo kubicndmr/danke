@@ -3,3 +3,4 @@ wandb
 yenv
 .env
 __pycache__
+backup

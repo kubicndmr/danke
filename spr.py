@@ -211,8 +211,8 @@ def fit(args):
     early_stopper_flag = False
 
     utils.print_log('\n---{ Training }---', log_txt)
-    while ((epoch < configurator.params['epochs_limit']) and (early_stopper_flag == False)
-           and (syntrainset['batch_size'] != 0)):
+    while (epoch < configurator.params['epochs_limit'] and early_stopper_flag == False
+           and syntrainset['batch_size'] != 0):
         # Train
         utils.print_log(f'\nEpoch [train]: {epoch}', log_txt, display=True)
         train_epoch(surgical_model,
