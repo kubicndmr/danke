@@ -24,7 +24,7 @@ def get_answer(processor, language_model, messages, max_new_tokens,
     Generates a response from the model based on the provided chat history.
 
     Parameters:
-    language_model: The language model to generate the response (MedGemma 3).
+    language_model: The language model to generate the response.
     processor: The tokenizer to process the text and feature extractor.
     messages: A list of dictionaries containing the chat history.
     max_new_tokens: The maximum number of new tokens to generate.
@@ -220,7 +220,7 @@ if __name__ == "__main__":
     model_id = 'google/gemma-3-27b-it' #'google/gemma-2-2b-it'
 
     # Login huggingface environment
-    huggingface_hub.login("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", add_to_git_credential=False)
+    huggingface_hub.login("hf_token", add_to_git_credential=False)
 
     # Model
     auto_processor = AutoProcessor.from_pretrained(
