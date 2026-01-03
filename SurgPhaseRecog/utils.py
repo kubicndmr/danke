@@ -90,7 +90,7 @@ def sample_hparams():
         "lr":10 ** random.uniform(-5, -3),
         "weight_decay":10 ** random.uniform(-6, -4),
         "ff_dropout":random.uniform(0.1, 0.5),
-        "freeze_layers":random.randint(15, 20),
+        "freeze_layers":random.randint(17, 23),
         "model_dim":random.choice([256, 512, 1024]),
         "focal_alpha":1,
         "focal_gamma":1,

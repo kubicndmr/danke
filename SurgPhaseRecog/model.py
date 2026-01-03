@@ -20,11 +20,11 @@ class TextEncoder(nn.Module):
             NotImplementedError
 
         if config["freeze"]:
-            assert config["freeze_layers"] > 0 and config["freeze_layers"] <= 20, "Can freeze up to 20 blocks"
+            assert config["freeze_layers"] >= 0 and config["freeze_layers"] <= 23, "Can freeze up to 20 blocks"
             for name, param in self.llm.named_parameters():
                 if name.startswith("embeddings"):
                     param.requires_grad = False
-                if any(f"encoder.layer.{i}" in name for i in range(config["freeze_layers"])):
+                if any(f"encoder.layer.{i}." in name for i in range(config["freeze_layers"])):
                     param.requires_grad = False
 
     def average_pool(self, last_hidden_states: Tensor, attention_mask: Tensor) -> Tensor:
