@@ -1,6 +1,7 @@
 logs
 wandb
-yenv
 .env
 __pycache__
 backup
+to_transfer
+Transcripts

@@ -1,6 +1,3 @@
-import os
-os.environ['HF_HOME'] = "path"
-
 import time
 import torch
 import argparse
@@ -10,6 +7,7 @@ import huggingface_hub
 import SynDataGen.synHelper as synHelper
 import SynDataGen.synPrompts as synPrompts
 
+from dotenv import load_dotenv
 from transformers import AutoProcessor
 from transformers import AutoModelForImageTextToText
 
@@ -134,7 +132,7 @@ def gen_data(processor, language_model, prompter):
             #if True:
             try:
                 print(
-                    f'\tStep: {int(i+1)}/{len(df_splits)}\t|\tMax new tokens: {max_new_tokens}')
+                    f'\tStep: {int(i+1)}/{len(df_splits)}\t|\tMaxx new tokens: {max_new_tokens}')
 
                 # Generate Answer
                 answer = get_answer(processor, language_model,
@@ -220,7 +218,8 @@ if __name__ == "__main__":
     model_id = 'google/gemma-3-27b-it' #'google/gemma-2-2b-it'
 
     # Login huggingface environment
-    huggingface_hub.login("hf_token", add_to_git_credential=False)
+    load_dotenv()
+    huggingface_hub.login()
 
     # Model
     auto_processor = AutoProcessor.from_pretrained(

@@ -1,7 +1,7 @@
-python spr.py --real_dataset_size 0 --syn_dataset_size 50
-python spr.py --real_dataset_size 0 --syn_dataset_size 100
-python spr.py --real_dataset_size 0 --syn_dataset_size 150
-python spr.py --real_dataset_size 0 --syn_dataset_size 200
-python spr.py --real_dataset_size 0 --syn_dataset_size 250
-python spr.py --real_dataset_size 0 --syn_dataset_size 300
-python spr.py --real_dataset_size 0 --syn_dataset_size 350
+#!/bin/bash
+
+N=5
+
+for ((i=1; i<=N; i++)); do
+    python spr.py --real_dataset_size 0 --syn_dataset_size 50 --real_data_path to_transfer/PoCaP-large-v3 --syn_data_path to_transfer/SynPoCaP
+done

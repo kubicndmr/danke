@@ -10,6 +10,9 @@ import SurgPhaseRecog.losses as losses
 import SurgPhaseRecog.config as config
 import SurgPhaseRecog.metrics as metrics
 
+from dotenv import load_dotenv
+from huggingface_hub import login
+
 #################################################################
 ################ Epoch Train/Validation Functions ###############
 #################################################################
@@ -112,7 +115,8 @@ def fit(args):
     ####################
     ## Data and Paths ##
     ####################
-    configurator = config.SurgConfig()
+    hparams = utils.sample_hparams()
+    configurator = config.SurgConfig(hparams)
 
     output_dir = utils.output_dir(args, configurator)
     wandb.run.name = output_dir[len("logs/"):]
@@ -123,6 +127,9 @@ def fit(args):
     with open(log_txt, "a") as f:
         for arg, value in vars(args).items():
             f.write(f"{arg}: {value}\n")
+        for section_name, section_dict in configurator.__dict__.items():
+            for arg, value in section_dict.items():
+                f.write(f"{section_name}.{arg}: {value}\n")
 
     dataset = utils.data_split(
         args.real_data_path,
@@ -479,6 +486,8 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    wandb.init()
+    load_dotenv()
+    wandb.init(mode="disabled")
+    login(token=os.getenv("HF_TOKEN"))
 
     fit(args)

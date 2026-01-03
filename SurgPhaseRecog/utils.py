@@ -3,6 +3,7 @@ import math
 import yaml
 import time
 import torch
+import random
 import matplotlib
 import numpy as np
 import matplotlib.pyplot as plt
@@ -69,12 +70,33 @@ def init_log(output_dir):
         start_time.strftime('%d-%m-%Y %H:%M:%S')),
         log_txt)
     print_log('\n---{ Hardware }---', log_txt)
-    print_log('GPU: {}'.format(torch.cuda.get_device_name()),
+    if torch.cuda.is_available():
+        print_log('GPU: {}'.format(torch.cuda.get_device_name()),
+                log_txt)
+        print_log('Properties: {}\n'.format(torch.cuda.get_device_properties("cuda")),
               log_txt)
-    print_log('Properties: {}\n'.format(torch.cuda.get_device_properties("cuda")),
-              log_txt)
+    else:
+        print_log('GPU not available, using CPU instead.',
+                  log_txt)
 
     return log_txt
+
+
+def sample_hparams():
+    """
+    set ranges here manually for hyper-parameter search
+    """
+    return {
+        "lr":10 ** random.uniform(-5, -3),
+        "weight_decay":10 ** random.uniform(-6, -4),
+        "ff_dropout":random.uniform(0.1, 0.5),
+        "freeze_layers":random.randint(15, 20),
+        "model_dim":random.choice([256, 512, 1024]),
+        "focal_alpha":1,
+        "focal_gamma":1,
+        "ldam_m":1,
+        "ldam_s":1
+    }
 
 
 def remove_tailzeros(arr):
@@ -412,9 +434,7 @@ def plot_metrics_over_runs(metrics_dict, metric_keys, output_path):
     for metric_name in metric_keys:
         plt.figure(dpi=100, constrained_layout=True)
 
-        # Iterate over each run for the specific metric and plot it
         for run_idx in range(metrics_dict[metric_name].shape[0]):
-            # Lower alpha for overlapping effect
             plt.plot(remove_tailzeros(
                 metrics_dict[metric_name][run_idx, :]), alpha=0.7, color='black')
 
@@ -423,7 +443,6 @@ def plot_metrics_over_runs(metrics_dict, metric_keys, output_path):
         plt.title(
             f'{metric_name} over {metrics_dict[metric_name].shape[0]} runs')
 
-        # Save the plot
         plt.savefig(f'{output_path}results/{metric_name}.jpg')
         plt.close()
 
@@ -469,6 +488,7 @@ def output_dir(args, config):
         output_dir = (
             f"logs/K[{args.n_splits}]Fold_nops[{args.syn_dataset_size}-{args.real_dataset_size}]_"
             f"loss[{config.loss_config['function']}]_wd[{config.params['weight_decay']}]_"
+            f"frozen_layers[{config.embedder_config['freeze_layers']}]_head[{config.classifier_config['head']}]_"
             f"lr[{config.params['lr']}]/"
         )
     elif config.loss_config["function"] == 'Focal':

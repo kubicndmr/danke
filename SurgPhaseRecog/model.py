@@ -20,7 +20,7 @@ class TextEncoder(nn.Module):
             NotImplementedError
 
         if config["freeze"]:
-            assert config["freeze_layers"] > 0 and config["freeze_layers"] <= 10, "Can freeze up to 10 blocks"
+            assert config["freeze_layers"] > 0 and config["freeze_layers"] <= 20, "Can freeze up to 20 blocks"
             for name, param in self.llm.named_parameters():
                 if name.startswith("embeddings"):
                     param.requires_grad = False
