@@ -1,3 +1,4 @@
+import os
 import time
 import torch
 import argparse
@@ -219,7 +220,7 @@ if __name__ == "__main__":
 
     # Login huggingface environment
     load_dotenv()
-    huggingface_hub.login()
+    huggingface_hub.login(token=os.getenv("HF_TOKEN"))
 
     # Model
     auto_processor = AutoProcessor.from_pretrained(

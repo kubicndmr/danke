@@ -198,7 +198,7 @@ def data_split(real_data_path: str, syn_data_path: str,
     assert 0 < eval_ratio < 0.5, "Evaluation split ratio should be in [0, 0.5] range!"
 
     # Synthetic Dataset (For Pretraining - Classic)
-    syn_dataset = listdir(syn_data_path, '.pkl')
+    syn_dataset = listdir(syn_data_path, '.csv')
 
     # Select all data if -1
     if syn_dataset_size == -1:
@@ -219,7 +219,7 @@ def data_split(real_data_path: str, syn_data_path: str,
     assert n_splits is None or 1 < n_splits < 6, "Folds should be in [2, 5] range!"
 
     # Real Dataset (For Finetuning - k-Fold)
-    real_dataset = listdir(real_data_path, '.pkl')
+    real_dataset = listdir(real_data_path, '.csv')
 
     # Select all data if -1
     if real_dataset_size == -1:

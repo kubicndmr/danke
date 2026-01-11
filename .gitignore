@@ -3,5 +3,5 @@ wandb
 .env
 __pycache__
 backup
-to_transfer
+TextualSPR-Dataset
 Transcripts
