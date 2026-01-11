@@ -39,7 +39,7 @@ class SPRDataset(Dataset):
 
     def get_data(self, data_path, batch_size):
         # Read
-        df = pd.read_pickle(data_path)
+        df = pd.read_csv(data_path, index_col=0)
 
         # Remove transition label
         df = df[df['Phase_Label'] != 8].reset_index(drop=True)

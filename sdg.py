@@ -1,4 +1,8 @@
 import os
+import dotenv
+dotenv.load_dotenv()
+os.environ["HF_HOME"] = os.getenv("HF_HOME")
+
 import time
 import torch
 import argparse
@@ -8,7 +12,6 @@ import huggingface_hub
 import SynDataGen.synHelper as synHelper
 import SynDataGen.synPrompts as synPrompts
 
-from dotenv import load_dotenv
 from transformers import AutoProcessor
 from transformers import AutoModelForImageTextToText
 
@@ -219,7 +222,6 @@ if __name__ == "__main__":
     model_id = 'google/gemma-3-27b-it' #'google/gemma-2-2b-it'
 
     # Login huggingface environment
-    load_dotenv()
     huggingface_hub.login(token=os.getenv("HF_TOKEN"))
 
     # Model

@@ -1,8 +1,13 @@
 import os
+import dotenv
+dotenv.load_dotenv()
+os.environ["HF_HOME"] = os.getenv("HF_HOME")
+
 import wandb
 import torch
 import argparse
 import numpy as np
+import huggingface_hub
 import SurgPhaseRecog.data as data
 import SurgPhaseRecog.utils as utils
 import SurgPhaseRecog.model as model
@@ -10,8 +15,6 @@ import SurgPhaseRecog.losses as losses
 import SurgPhaseRecog.config as config
 import SurgPhaseRecog.metrics as metrics
 
-from dotenv import load_dotenv
-from huggingface_hub import login
 
 #################################################################
 ################ Epoch Train/Validation Functions ###############
@@ -486,8 +489,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    load_dotenv()
+    huggingface_hub.login(token=os.getenv("HF_TOKEN"))
     wandb.init(mode="disabled")
-    login(token=os.getenv("HF_TOKEN"))
 
     fit(args)

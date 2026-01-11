@@ -1,7 +1,7 @@
 #!/bin/bash -l
 #SBATCH --job-name=SDG
 #SBATCH --ntasks=1
-#SBATCH --gres=gpu:a100:1 -C a100_80
+#SBATCH --gres=gpu:a40:1
 #SBATCH --output=slurm-%x.%j.out
 #SBATCH --error=slurm-%x.%j.err
 ##SBATCH --mail-type=end,fail
@@ -25,7 +25,7 @@ source activate kenv
 echo "source activate kenv"
 
 # Run training script
-python sdg.py -t SynPoCaP-14 -n 25
-#for ((i=1; i<=5; i++)); do
-#    python spr.py --real_dataset_size 0 --syn_dataset_size 200 --real_data_path to_transfer/PoCaP-large-v3 --syn_data_path to_transfer/SynPoCaP
-#done
+#python sdg.py -t SynPoCaP-15 -n 35
+for ((i=1; i<=5; i++)); do
+    python spr.py --real_dataset_size 0 --syn_dataset_size 300 --real_data_path TextualSPR-Dataset/PoCaP-large-v3 --syn_data_path TextualSPR-Dataset/SynPoCaP
+done
