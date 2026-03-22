@@ -46,7 +46,9 @@ class TextClassifier(nn.Module):
     def __init__(self, config: dict):
         super().__init__()
 
-        if config["head"] == "single_layer":
+        self.head = config["head"]
+
+        if self.head == "single_layer":
             self.classifier = nn.Sequential(
                 nn.Dropout(p=config["ff_dropout"]),
                 nn.Conv1d(
@@ -56,48 +58,55 @@ class TextClassifier(nn.Module):
                 )
             )
 
-        elif config["head"] == "double_layers":
-            self.classifier = nn.Sequential(
-                nn.Conv1d(
-                    in_channels=config["input_dim"],
-                    out_channels=config["model_dim"],
-                    kernel_size=1,
-                    bias=False
-                ),
-                nn.BatchNorm1d(config["model_dim"]),
-                nn.ReLU(),
-                nn.Conv1d(
-                    in_channels=config["model_dim"],
-                    out_channels=config["n_classes"],
-                    kernel_size=1,
-                ),
+        elif self.head == "temporal":
+            self.dropout = nn.Dropout(p=config["ff_dropout"])
+
+            self.conv1 = nn.Conv1d(
+                in_channels=config["input_dim"],
+                out_channels=config["model_dim"],
+                kernel_size=1,
             )
 
-        elif config["head"] == "temporal":
-            self.classifier = nn.Sequential(
-                nn.Conv1d(
-                    in_channels=config["input_dim"],
-                    out_channels=config["model_dim"],
-                    kernel_size=1,
-                ),
-                nn.BatchNorm1d(config["model_dim"]),
-                nn.ReLU(),
-                nn.LSTM(
-                    input_size=config["model_dim"],
-                    hidden_size=config["model_dim"]
-                ),
-                nn.Conv1d(
-                    in_channels=config["model_dim"],
-                    out_channels=config["n_classes"],
-                    kernel_size=1,
-                ),
+            self.bn1 = nn.BatchNorm1d(config["model_dim"])
+            self.relu = nn.ReLU()
+
+            self.lstm = nn.LSTM(
+                input_size=config["model_dim"],
+                hidden_size=config["model_dim"],
+                batch_first=True,   # IMPORTANT
+            )
+
+            self.conv_out = nn.Conv1d(
+                in_channels=config["model_dim"],
+                out_channels=config["n_classes"],
+                kernel_size=1,
             )
 
         else:
             raise NotImplementedError
 
     def forward(self, x):
-        return self.classifier(x)
+        x = x.permute(1, 0)  # (encoder_dim, B)
+
+        if self.head == "single_layer":
+            x = self.classifier(x)  # (n_classes, B)
+            x = x.permute(1, 0)  # (B, n_classes
+            return x
+
+        elif self.head == "temporal":
+            x = self.dropout(x)
+
+            x = self.conv1(x) # (model_dim, B)
+            x = x.permute(1, 0)
+            x = self.bn1(x) # (B, model_dim)
+            x = self.relu(x)
+
+            x, _ = self.lstm(x) # (B, lstm_dim)
+
+            x = x.permute(1, 0) # (lstm_dim, B)
+            x = self.conv_out(x) # (n_classes, B)
+            x = x.permute(1, 0) # (B, n_classes)
+            return x
 
 
 class SLPNet(nn.Module):
@@ -112,7 +121,7 @@ class SLPNet(nn.Module):
         # Classifier
         self.classifier = TextClassifier(config.classifier_config)
 
-    def forward(self, x, attmask):
-        x = self.text_encoder(x, attmask)
-        x = self.classifier(x.T)
-        return x.T
+    def forward(self, x, attmask): # x: (B, T)
+        x = self.text_encoder(x, attmask) # (B, C=1024)
+        x = self.classifier(x) # (B, n_classes)
+        return x

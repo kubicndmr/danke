@@ -32,8 +32,8 @@ def get_indices(target_dir, prefix):
 
 
 if __name__ == '__main__':
-    source = Path("SynPoCaP-14")
-    destination = Path("to_transfer/SynPoCaP")
+    source = Path("SynPoCaP-17")
+    destination = Path("TextualSPR-Dataset/SynPoCaP")
     prefix = "SynOP_"
 
     if not os.path.exists(source):

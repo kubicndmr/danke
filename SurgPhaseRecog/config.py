@@ -18,6 +18,7 @@ class SurgConfig:
         }
         
         # Classifier
+        """
         self.classifier_config = {
             "head": "single_layer",
             "input_dim": 1024, 
@@ -25,14 +26,22 @@ class SurgConfig:
             "n_classes": 8,
             "ff_dropout":overrides.get("ff_dropout", 0.3)
         }
-        
+        """
+        self.classifier_config = {
+            "head": "temporal",
+            "input_dim": 1024, 
+            "model_dim":overrides.get("model_dim", 1024),
+            "n_classes": 8,
+            "ff_dropout":overrides.get("ff_dropout", 0.3)
+        }
+
         # Loss Function
         self.loss_config = {
             "function": "WCE",
             "focal_alpha":overrides.get("focal_alpha", 0.25),
             "focal_gamma":overrides.get("focal_gamma", 2),
             "ldam_m":overrides.get("ldam_m", 0.5),
-            "ldam_s":overrides.get("ldam_2", 30)
+            "ldam_s":overrides.get("ldam_s", 30)
         }
         
         # Training parameters

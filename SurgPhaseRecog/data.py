@@ -13,16 +13,6 @@ class SPRDataset(Dataset):
         self.config = config
         self.data_path = data_path
         self.op_name = data_path.split('/')[-1][:-4]
-
-        # Tokenizer
-        if config["llm"] == "bert":
-            self.tokenizer = BertTokenizer.from_pretrained(
-                config["model_name"])
-        elif config["llm"] == "e5-large":
-            self.tokenizer = AutoTokenizer.from_pretrained(
-                config["model_name"])
-        else:
-            raise NotImplementedError
         
         # Extract data
         self.get_data(data_path, config["batch_size"])
@@ -39,31 +29,20 @@ class SPRDataset(Dataset):
 
     def get_data(self, data_path, batch_size):
         # Read
-        df = pd.read_csv(data_path, index_col=0)
+        df = pd.read_pickle(data_path)
 
         # Remove transition label
         df = df[df['Phase_Label'] != 8].reset_index(drop=True)
-
-        # Add query
-        if self.config['llm'] == 'e5-large':
-            df['Text'] = df['Text'].apply(lambda x: 'query: ' + x)
 
         # If batch size is 1, remove last sample
         if len(df) % batch_size == 1:
             df = df.iloc[:-1].reset_index(drop=True)
 
-        # Tokenize text
-        inputs = self.tokenizer(
-            df['Text'].tolist(),
-            padding=True,
-            truncation=True,
-            max_length=512,
-            return_tensors='pt',
-            return_attention_mask=True
-        )
+        # Input ids
+        self.input_ids = torch.tensor(df["input_ids"].tolist(), dtype=torch.long)
 
-        self.input_ids = inputs['input_ids']
-        self.attention_mask = inputs['attention_mask']
+        # Input ids
+        self.attention_mask = torch.tensor(df["attention_mask"].tolist(), dtype=torch.long)
 
         # Labels as a tensor
         self.labels = torch.tensor(df['Phase_Label'].values, dtype=torch.long)

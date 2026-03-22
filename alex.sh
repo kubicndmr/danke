@@ -26,6 +26,6 @@ echo "source activate kenv"
 
 # Run training script
 #python sdg.py -t SynPoCaP-15 -n 35
-for ((i=1; i<=5; i++)); do
-    python spr.py --real_dataset_size 0 --syn_dataset_size 300 --real_data_path TextualSPR-Dataset/PoCaP-large-v3 --syn_data_path TextualSPR-Dataset/SynPoCaP
+for ((i=1; i<=4; i++)); do
+    python spr.py --real_dataset_size 0 --syn_dataset_size 50 --real_data_path TextualSPR-Dataset/PoCaP-large-v3 --syn_data_path TextualSPR-Dataset/SynPoCaP
 done

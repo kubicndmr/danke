@@ -3,7 +3,6 @@ import dotenv
 dotenv.load_dotenv()
 os.environ["HF_HOME"] = os.getenv("HF_HOME")
 
-import wandb
 import torch
 import argparse
 import numpy as np
@@ -122,7 +121,6 @@ def fit(args):
     configurator = config.SurgConfig(hparams)
 
     output_dir = utils.output_dir(args, configurator)
-    wandb.run.name = output_dir[len("logs/"):]
 
     log_txt = utils.init_log(output_dir)
 
@@ -442,7 +440,6 @@ def fit(args):
             utils.print_log(f"[Average {metric}]\t: {results_mean[idx]:.5f} +- {results_std[idx]:.5f}",
                             log_txt,
                             display=True)
-            wandb.log({metric: results_mean[idx]})
 
         ################
         ## Save model ##
@@ -490,6 +487,5 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     huggingface_hub.login(token=os.getenv("HF_TOKEN"))
-    wandb.init(mode="disabled")
 
     fit(args)
